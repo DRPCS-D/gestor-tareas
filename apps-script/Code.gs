@@ -9,6 +9,10 @@
  *   > Implementar > Aplicación web
  *   > Ejecutar como: Yo | Quién tiene acceso: Cualquier usuario
  *
+ * Primera vez: ejecuta la función `instalar` (botón Ejecutar en el editor, o
+ * menú "Gestor de Tareas" de la hoja tras recargarla). Crea todo lo de abajo
+ * y un admin inicial (la contraseña queda en la pestaña Usuarios).
+ *
  * La hoja debe tener cuatro pestañas (fila 1 = encabezados):
  *   "Tareas":      id | folio | sucursalId | titulo | descripcion | prioridad |
  *                  estado | asignadoA | creadoPor | fechaCreacion |
@@ -684,6 +688,91 @@ function validarSucursalesDeRol_(rol, valor) {
     if (!filaPorId_(sheet, COL_SUC.id, id)) throw new Error('Una de las sucursales no existe.');
   });
   return lista;
+}
+
+// ---------- Instalación ----------
+
+var ENCABEZADOS = {
+  Tareas: ['id', 'folio', 'sucursalId', 'titulo', 'descripcion', 'prioridad', 'estado',
+           'asignadoA', 'creadoPor', 'fechaCreacion', 'completadoPor', 'fechaCompletada'],
+  Sucursales: ['id', 'nombre', 'direccion', 'activo'],
+  Usuarios: ['usuario', 'password', 'rol', 'activo', 'sucursales'],
+  Comentarios: ['id', 'tareaId', 'usuario', 'texto', 'fecha']
+};
+
+/** Agrega el menú "Gestor de Tareas" al abrir la hoja. */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Gestor de Tareas')
+    .addItem('Instalar / reparar hoja', 'instalar')
+    .addToUi();
+}
+
+/**
+ * Crea las pestañas y encabezados que falten, con validaciones y formato, y
+ * deja un admin inicial y una sucursal de ejemplo si no hay ninguno.
+ * Es idempotente: se puede ejecutar varias veces sin pisar datos existentes.
+ * Ejecútala una vez a mano desde el editor de Apps Script (Ejecutar > instalar)
+ * o desde el menú "Gestor de Tareas" de la hoja.
+ */
+function instalar() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var creadas = [];
+
+  Object.keys(ENCABEZADOS).forEach(function (nombre) {
+    var sheet = ss.getSheetByName(nombre);
+    if (!sheet) {
+      // Reutiliza la hoja vacía por defecto en lugar de dejarla sobrando.
+      var primera = ss.getSheets()[0];
+      var vacia = ss.getSheets().length === 1 && primera.getLastRow() === 0 && primera.getName() !== nombre;
+      sheet = vacia ? primera.setName(nombre) : ss.insertSheet(nombre);
+      creadas.push(nombre);
+    }
+    var cols = ENCABEZADOS[nombre];
+    sheet.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight('bold').setBackground('#e8eaf6');
+    sheet.setFrozenRows(1);
+  });
+
+  aplicarValidaciones_(ss);
+
+  var mensaje = creadas.length ? 'Pestañas creadas: ' + creadas.join(', ') + '. ' : 'Las pestañas ya existían. ';
+
+  var sucursales = ss.getSheetByName(SHEET_SUCURSALES);
+  if (sucursales.getLastRow() < 2) {
+    sucursales.appendRow([Utilities.getUuid().slice(0, 8), 'Matriz', '', true]);
+    mensaje += 'Sucursal de ejemplo "Matriz" creada. ';
+  }
+
+  var usuarios = ss.getSheetByName(SHEET_USUARIOS);
+  if (contarAdminsActivos_(usuarios) === 0) {
+    var password = Utilities.getUuid().replace(/-/g, '').slice(0, 10);
+    usuarios.appendRow(['ADMIN', password, 'admin', true, '']);
+    mensaje += 'Admin inicial: usuario ADMIN, contraseña ' + password +
+      ' (también está en la pestaña Usuarios; cámbiala al entrar). ';
+  }
+
+  Logger.log(mensaje);
+  try { ss.toast(mensaje, 'Gestor de Tareas', 30); } catch (e) {}
+  return mensaje;
+}
+
+/** Listas desplegables y casillas para que editar a mano la hoja no rompa valores. */
+function aplicarValidaciones_(ss) {
+  var lista = function (valores) {
+    return SpreadsheetApp.newDataValidation().requireValueInList(valores, true).setAllowInvalid(false).build();
+  };
+  var casilla = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+  var filas = 1000;
+
+  var tareas = ss.getSheetByName(SHEET_TAREAS);
+  tareas.getRange(2, COL.prioridad + 1, filas, 1).setDataValidation(lista(PRIORIDADES));
+  tareas.getRange(2, COL.estado + 1, filas, 1).setDataValidation(lista(['pendiente', 'completada']));
+
+  ss.getSheetByName(SHEET_SUCURSALES).getRange(2, COL_SUC.activo + 1, filas, 1).setDataValidation(casilla);
+
+  var usuarios = ss.getSheetByName(SHEET_USUARIOS);
+  usuarios.getRange(2, COL_USR.rol + 1, filas, 1).setDataValidation(lista(['admin', 'gerente', 'personal']));
+  usuarios.getRange(2, COL_USR.activo + 1, filas, 1).setDataValidation(casilla);
 }
 
 // ---------- Helpers de hoja ----------

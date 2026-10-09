@@ -14,7 +14,9 @@ Frontend: React 19 + Vite + Tailwind 4 (Vercel). Backend: Google Apps Script sob
 
 ## Google Sheet
 
-Crea una hoja con estas cuatro pestañas (fila 1 = encabezados exactos):
+**Automático:** crea una hoja de cálculo vacía, pega `Code.gs` en Apps Script (ver abajo) y ejecuta la función `instalar` una vez. Crea las pestañas, encabezados, listas desplegables, una sucursal «Matriz» y un usuario `ADMIN` con contraseña aleatoria (la verás en la pestaña `Usuarios`). Es seguro volver a ejecutarla.
+
+Si prefieres hacerlo a mano, las pestañas son (fila 1 = encabezados exactos):
 
 | Pestaña | Columnas (A, B, C…) |
 |---|---|
@@ -23,14 +25,15 @@ Crea una hoja con estas cuatro pestañas (fila 1 = encabezados exactos):
 | `Usuarios` | usuario, password, rol, activo, sucursales |
 | `Comentarios` | id, tareaId, usuario, texto, fecha |
 
-Para arrancar, agrega a mano **un admin** en `Usuarios`: `ADMIN | <contraseña> | admin | TRUE |` (sucursales vacío). El resto se crea desde la app.
+Sin `instalar`, agrega a mano **un admin** en `Usuarios`: `ADMIN | <contraseña> | admin | TRUE |` (sucursales vacío). El resto se crea desde la app.
 `sucursales` guarda ids de la pestaña `Sucursales`, separados por coma (la app lo gestiona sola).
 
 ## Backend (Apps Script)
 
 1. En la hoja: Extensiones → Apps Script. Pega `apps-script/Code.gs` y, en la configuración del proyecto, activa «Mostrar el archivo appsscript.json» y pega `apps-script/appsscript.json`.
-2. Implementar → Aplicación web → Ejecutar como: **Yo** · Acceso: **Cualquier usuario**.
-3. Copia la URL `/exec`.
+2. Elige la función `instalar` y pulsa Ejecutar (acepta los permisos). Mira el resultado en el registro de ejecución o en la hoja.
+3. Implementar → Aplicación web → Ejecutar como: **Yo** · Acceso: **Cualquier usuario**.
+4. Copia la URL `/exec`.
 
 ## Frontend
 

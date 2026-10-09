@@ -31,7 +31,7 @@ Sin `instalar`, agrega a mano **un admin** en `Usuarios`: `ADMIN | <contraseña>
 ## Backend (Apps Script)
 
 1. En la hoja: Extensiones → Apps Script. Pega `apps-script/Code.gs` y, en la configuración del proyecto, activa «Mostrar el archivo appsscript.json» y pega `apps-script/appsscript.json`.
-2. Elige la función `instalar` y pulsa Ejecutar (acepta los permisos). Mira el resultado en el registro de ejecución o en la hoja.
+2. Elige la función `instalar` y pulsa Ejecutar (acepta los permisos). Si el proyecto no está vinculado a un Sheet (creado desde script.google.com), crea uno llamado «Gestor de Tareas» en tu Drive; la URL sale en el registro de ejecución.
 3. Implementar → Aplicación web → Ejecutar como: **Yo** · Acceso: **Cualquier usuario**.
 4. Copia la URL `/exec`.
 

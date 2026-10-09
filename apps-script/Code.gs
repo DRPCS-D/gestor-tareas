@@ -12,6 +12,9 @@
  * Primera vez: ejecuta la función `instalar` (botón Ejecutar en el editor, o
  * menú "Gestor de Tareas" de la hoja tras recargarla). Crea todo lo de abajo
  * y un admin inicial (la contraseña queda en la pestaña Usuarios).
+ * Funciona de dos formas: script vinculado a un Sheet (Extensiones > Apps
+ * Script) o proyecto independiente (script.google.com), en cuyo caso crea el
+ * Sheet "Gestor de Tareas" en tu Drive y guarda su ID en SPREADSHEET_ID.
  *
  * La hoja debe tener cuatro pestañas (fila 1 = encabezados):
  *   "Tareas":      id | folio | sucursalId | titulo | descripcion | prioridad |
@@ -716,7 +719,7 @@ function onOpen() {
  * o desde el menú "Gestor de Tareas" de la hoja.
  */
 function instalar() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet_(true);
   var creadas = [];
 
   Object.keys(ENCABEZADOS).forEach(function (nombre) {
@@ -751,6 +754,7 @@ function instalar() {
       ' (también está en la pestaña Usuarios; cámbiala al entrar). ';
   }
 
+  mensaje += 'Hoja: ' + ss.getUrl();
   Logger.log(mensaje);
   try { ss.toast(mensaje, 'Gestor de Tareas', 30); } catch (e) {}
   return mensaje;
@@ -777,8 +781,36 @@ function aplicarValidaciones_(ss) {
 
 // ---------- Helpers de hoja ----------
 
+/**
+ * Hoja de cálculo de datos. Si el script está vinculado a un Sheet (creado
+ * desde Extensiones > Apps Script) se usa ese; si es un proyecto independiente
+ * (script.google.com) se usa la propiedad SPREADSHEET_ID. Con `crear`, un
+ * proyecto independiente sin propiedad crea el Sheet y guarda su ID.
+ */
+function getSpreadsheet_(crear) {
+  var activa = SpreadsheetApp.getActiveSpreadsheet();
+  if (activa) return activa;
+
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('SPREADSHEET_ID');
+  if (id) {
+    try {
+      return SpreadsheetApp.openById(id);
+    } catch (e) {
+      throw new Error('No se pudo abrir la hoja (SPREADSHEET_ID). Revisa el ID y los permisos.');
+    }
+  }
+  if (!crear) {
+    throw new Error('El backend no está configurado: ejecuta la función "instalar" una vez.');
+  }
+  var ss = SpreadsheetApp.create('Gestor de Tareas');
+  props.setProperty('SPREADSHEET_ID', ss.getId());
+  Logger.log('Hoja creada: ' + ss.getUrl());
+  return ss;
+}
+
 function getSheet_(name) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  var sheet = getSpreadsheet_(false).getSheetByName(name);
   if (!sheet) throw new Error('No existe la pestaña "' + name + '" en la hoja de cálculo.');
   return sheet;
 }

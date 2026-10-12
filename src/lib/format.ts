@@ -10,6 +10,16 @@ export function formatFecha(iso: string | null | undefined): string {
   return `${d}/${m}/${f.getFullYear()}`
 }
 
+/** '2026-03-14T13:05:00.000Z' → '14/03/2026 10:05' (hora local). */
+export function formatFechaHora(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const f = new Date(iso)
+  if (Number.isNaN(f.getTime())) return '—'
+  const hh = String(f.getHours()).padStart(2, '0')
+  const mm = String(f.getMinutes()).padStart(2, '0')
+  return `${formatFecha(iso)} ${hh}:${mm}`
+}
+
 /** Normaliza texto para buscar sin tildes ni mayusculas. */
 export function normalizar(texto: string): string {
   return texto

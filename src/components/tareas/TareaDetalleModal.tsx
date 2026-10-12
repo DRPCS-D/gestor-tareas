@@ -6,7 +6,7 @@ import { Cargando, ErrorBox } from '@/components/ui/estado'
 import { Textarea } from '@/components/ui/field'
 import { Modal } from '@/components/ui/modal'
 import { useComentarios } from '@/hooks/useComentarios'
-import { formatFecha } from '@/lib/format'
+import { formatFecha, formatFechaHora } from '@/lib/format'
 import type { Tarea } from '@/lib/tipos'
 import { BadgeEstado, BadgePrioridad } from './badges'
 
@@ -136,7 +136,7 @@ export function TareaDetalleModal({
                 {comentarios.map((c) => (
                   <li key={c.id} className="rounded-md bg-secondary px-3 py-2">
                     <p className="text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">{c.usuario}</span> · {formatFecha(c.fecha)}
+                      <span className="font-medium text-foreground">{c.usuario}</span> · {formatFechaHora(c.fecha)}
                     </p>
                     <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{c.texto}</p>
                   </li>

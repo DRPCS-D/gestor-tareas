@@ -7,12 +7,20 @@ import { useTabla } from './useTabla'
 export function useUsuarios() {
   const lista = useTabla<UsuarioApp>(TABLAS.usuarios)
 
-  async function crear(payload: { usuario: string; password: string; rol: Rol; activo: boolean; sucursales: string[] }) {
+  async function crear(payload: {
+    usuario: string
+    nombre: string
+    password: string
+    rol: Rol
+    activo: boolean
+    sucursales: string[]
+  }) {
     try {
       await callApi(
         'createUsuario',
         conCredenciales({
           nuevoUsuario: payload.usuario,
+          nombre: payload.nombre,
           nuevaPassword: payload.password,
           rol: payload.rol,
           activo: payload.activo,
@@ -28,7 +36,7 @@ export function useUsuarios() {
   /** Actualiza rol/activo, y opcionalmente nombre y contraseña (si se pasan). Devuelve el nombre final. */
   async function editar(
     usuario: string,
-    payload: { rol: Rol; activo: boolean; sucursales: string[]; nuevoUsuario?: string; nuevaPassword?: string },
+    payload: { rol: Rol; activo: boolean; sucursales: string[]; nombre: string; nuevoUsuario?: string; nuevaPassword?: string },
   ) {
     try {
       const data = await callApi<{ usuario: string }>(
@@ -36,6 +44,7 @@ export function useUsuarios() {
         conCredenciales({
           targetUsuario: usuario,
           nuevoUsuario: payload.nuevoUsuario || '',
+          nombre: payload.nombre,
           rol: payload.rol,
           activo: payload.activo,
           sucursales: payload.sucursales,

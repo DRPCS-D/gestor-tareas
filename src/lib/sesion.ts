@@ -4,6 +4,8 @@ const CLAVE = 'gestor-tareas:sesion'
 
 export interface Sesion {
   usuario: string
+  /** Nombre completo, si lo tiene. */
+  nombre?: string
   password: string
   rol: Rol
   sucursales: string[]

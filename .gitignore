@@ -32,3 +32,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Migración única (datos de personas; el repo es público)
+migracion/
+public/migracion/
+apps-script/Migracion.gs

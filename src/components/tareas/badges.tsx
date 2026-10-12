@@ -13,5 +13,6 @@ export function BadgePrioridad({ prioridad }: { prioridad: Prioridad }) {
 }
 
 export function BadgeEstado({ estado }: { estado: EstadoTarea }) {
-  return <Badge tono={estado === 'completada' ? 'success' : 'warning'}>{ESTADO_LABEL[estado]}</Badge>
+  const tono: TonoBadge = estado === 'completada' ? 'success' : estado === 'cancelada' ? 'neutral' : 'warning'
+  return <Badge tono={tono}>{ESTADO_LABEL[estado]}</Badge>
 }

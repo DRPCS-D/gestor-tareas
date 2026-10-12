@@ -24,11 +24,12 @@ export const PRIORIDAD_LABEL: Record<Prioridad, string> = {
   urgente: 'Urgente',
 }
 
-export type EstadoTarea = 'pendiente' | 'completada'
+export type EstadoTarea = 'pendiente' | 'completada' | 'cancelada'
 
 export const ESTADO_LABEL: Record<EstadoTarea, string> = {
   pendiente: 'Pendiente',
   completada: 'Completada',
+  cancelada: 'Cancelada',
 }
 
 export interface Tarea {
@@ -44,6 +45,10 @@ export interface Tarea {
   fechaCreacion: string
   completadoPor: string
   fechaCompletada: string
+  /** Nombres completos para mostrar (si no hay, repiten el usuario). */
+  creadoNombre: string
+  asignadoNombre: string
+  completadoNombre: string
 }
 
 export interface Sucursal {
@@ -57,12 +62,16 @@ export interface Comentario {
   id: string
   tareaId: string
   usuario: string
+  usuarioNombre: string
   texto: string
   fecha: string
 }
 
 export interface UsuarioApp {
+  /** Nombre de acceso (login). */
   usuario: string
+  /** Nombre completo, opcional. */
+  nombre: string
   rol: Rol
   activo: boolean
   /** Ids de sucursal: uno para gerente, uno o más para personal, ninguno para admin. */
@@ -72,5 +81,6 @@ export interface UsuarioApp {
 /** Personal asignable (lo que devuelve `listPersonal`). */
 export interface Personal {
   usuario: string
+  nombre: string
   sucursales: string[]
 }

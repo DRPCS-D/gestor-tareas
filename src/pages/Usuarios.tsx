@@ -33,7 +33,7 @@ export default function Usuarios() {
   const filtrados = useMemo(() => {
     const q = normalizar(busqueda)
     if (!q) return data
-    return data.filter((u) => normalizar(u.usuario).includes(q))
+    return data.filter((u) => normalizar(`${u.usuario} ${u.nombre}`).includes(q))
   }, [data, busqueda])
 
   const [modalNuevo, setModalNuevo] = useState(false)
@@ -65,7 +65,7 @@ export default function Usuarios() {
               name="busqueda"
               aria-label="Buscar"
               className="pl-9"
-              placeholder="Buscar por usuario…"
+              placeholder="Buscar por usuario o nombre…"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
             />
@@ -74,7 +74,7 @@ export default function Usuarios() {
       )}
 
       {loading ? (
-        <TableSkeleton columnas={[30, 25, 30, 15]} />
+        <TableSkeleton columnas={[22, 25, 22, 22, 12]} />
       ) : error ? (
         <ErrorBox mensaje={error} />
       ) : data.length === 0 ? (
@@ -87,6 +87,7 @@ export default function Usuarios() {
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
                 <th className="px-4 py-2.5 font-medium">Usuario</th>
+                <th className="px-4 py-2.5 font-medium">Nombre</th>
                 <th className="px-4 py-2.5 font-medium">Rol</th>
                 <th className="px-4 py-2.5 font-medium">Sucursales</th>
                 <th className="px-4 py-2.5 font-medium">Estado</th>
@@ -112,6 +113,7 @@ export default function Usuarios() {
                       <span className="ml-2 text-xs text-muted-foreground">(tú)</span>
                     )}
                   </td>
+                  <td className="px-4 py-2.5 text-foreground">{u.nombre || '—'}</td>
                   <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{ROL_LABEL[u.rol]}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">
                     {u.rol === 'admin'

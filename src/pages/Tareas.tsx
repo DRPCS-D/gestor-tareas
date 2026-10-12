@@ -22,7 +22,7 @@ import { PRIORIDADES, PRIORIDAD_LABEL, type EstadoTarea, type Prioridad, type Ta
 export default function Tareas() {
   const { esAdmin, esGerente, esPersonal, puedeGestionar, sucursales: misSucursales } = useAuth()
   const tabla = useAltoRestante<HTMLDivElement>()
-  const { data, loading, error, refetch, crear, editar, completar, reabrir, eliminar } = useTareas()
+  const { data, loading, error, refetch, crear, editar, completar, cancelar, reabrir, eliminar } = useTareas()
   const { data: sucursales, nombres } = useSucursales()
   const { data: personal } = usePersonal(puedeGestionar)
 
@@ -33,7 +33,7 @@ export default function Tareas() {
 
   const [detalle, setDetalle] = useState<Tarea | null>(null)
   const [modalForm, setModalForm] = useState<'nueva' | Tarea | null>(null)
-  const [modalCompletar, setModalCompletar] = useState<Tarea | null>(null)
+  const [modalCierre, setModalCierre] = useState<{ tarea: Tarea; tipo: 'completar' | 'cancelar' } | null>(null)
   const [nota, setNota] = useState('')
   const [modalBorrar, setModalBorrar] = useState<Tarea | null>(null)
   const [procesando, setProcesando] = useState(false)
@@ -50,7 +50,7 @@ export default function Tareas() {
       .filter(
         (t) =>
           !q ||
-          [t.folio, t.titulo, t.descripcion, t.asignadoA, nombres.get(t.sucursalId) ?? ''].some((v) =>
+          [t.folio, t.titulo, t.descripcion, t.asignadoA, t.asignadoNombre ?? '', nombres.get(t.sucursalId) ?? ''].some((v) =>
             normalizar(String(v)).includes(q),
           ),
       )
@@ -111,6 +111,7 @@ export default function Tareas() {
               <option value="">Todos los estados</option>
               <option value="pendiente">Pendientes</option>
               <option value="completada">Completadas</option>
+              <option value="cancelada">Canceladas</option>
             </Select>
             <Select aria-label="Prioridad" className="w-auto" value={fPrioridad} onChange={(e) => setFPrioridad(e.target.value as '' | Prioridad)}>
               <option value="">Toda prioridad</option>
@@ -179,7 +180,7 @@ export default function Tareas() {
                     {recortar(t.titulo, 50)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{nombreSucursal(t.sucursalId)}</td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{t.asignadoA || '—'}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{t.asignadoNombre || t.asignadoA || '—'}</td>
                   <td className="whitespace-nowrap px-4 py-2.5">
                     <BadgePrioridad prioridad={t.prioridad} />
                   </td>
@@ -195,7 +196,7 @@ export default function Tareas() {
       )}
 
       <TareaDetalleModal
-        tarea={modalBorrar || modalCompletar || modalForm ? null : detalle}
+        tarea={modalBorrar || modalCierre || modalForm ? null : detalle}
         nombreSucursal={detalle ? nombreSucursal(detalle.sucursalId) : ''}
         puedeGestionar={!!detalle && gestiona(detalle)}
         esAdmin={esAdmin}
@@ -203,7 +204,11 @@ export default function Tareas() {
         onEditar={() => setModalForm(detalle)}
         onCompletar={() => {
           setNota('')
-          setModalCompletar(detalle)
+          if (detalle) setModalCierre({ tarea: detalle, tipo: 'completar' })
+        }}
+        onCancelar={() => {
+          setNota('')
+          if (detalle) setModalCierre({ tarea: detalle, tipo: 'cancelar' })
         }}
         onReabrir={() => detalle && accion(() => reabrir(detalle.id), 'Tarea reabierta.')}
         onBorrar={() => setModalBorrar(detalle)}
@@ -226,30 +231,34 @@ export default function Tareas() {
       />
 
       <Modal
-        abierto={modalCompletar !== null}
-        titulo={`Completar tarea #${modalCompletar?.folio ?? ''}`}
-        descripcion={modalCompletar?.titulo}
-        onCerrar={() => setModalCompletar(null)}
+        abierto={modalCierre !== null}
+        titulo={`${modalCierre?.tipo === 'cancelar' ? 'Cancelar' : 'Completar'} tarea #${modalCierre?.tarea.folio ?? ''}`}
+        descripcion={modalCierre?.tarea.titulo}
+        onCerrar={() => setModalCierre(null)}
         ancho="max-w-md"
         footer={
           <>
-            <Button variant="outline" onClick={() => setModalCompletar(null)} disabled={procesando}>
+            <Button variant="outline" onClick={() => setModalCierre(null)} disabled={procesando}>
               Cancelar
             </Button>
             <Button
               disabled={procesando}
               onClick={async () => {
-                if (!modalCompletar) return
-                const ok = await accion(() => completar(modalCompletar.id, nota.trim()), 'Tarea completada.')
-                if (ok) setModalCompletar(null)
+                if (!modalCierre) return
+                const { tarea, tipo } = modalCierre
+                const ok =
+                  tipo === 'cancelar'
+                    ? await accion(() => cancelar(tarea.id, nota.trim()), 'Tarea cancelada.')
+                    : await accion(() => completar(tarea.id, nota.trim()), 'Tarea completada.')
+                if (ok) setModalCierre(null)
               }}
             >
-              {procesando ? 'Guardando…' : 'Marcar como completada'}
+              {procesando ? 'Guardando…' : modalCierre?.tipo === 'cancelar' ? 'Cancelar tarea' : 'Marcar como completada'}
             </Button>
           </>
         }
       >
-        <Field label="Nota de cierre" hint="Opcional. Queda como comentario de la tarea.">
+        <Field label={modalCierre?.tipo === 'cancelar' ? 'Motivo' : 'Nota de cierre'} hint="Opcional. Queda como comentario de la tarea.">
           <Textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={3} maxLength={900} autoFocus />
         </Field>
       </Modal>

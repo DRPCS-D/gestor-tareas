@@ -21,8 +21,10 @@ export function useTareas() {
     ejecutar('updateTarea', { id, ...datos }, 'No se pudo guardar la tarea.')
   const completar = (id: string, nota: string) =>
     ejecutar('completarTarea', { id, nota }, 'No se pudo completar la tarea.')
+  const cancelar = (id: string, nota: string) =>
+    ejecutar('cancelarTarea', { id, nota }, 'No se pudo cancelar la tarea.')
   const reabrir = (id: string) => ejecutar('reabrirTarea', { id }, 'No se pudo reabrir la tarea.')
   const eliminar = (id: string) => ejecutar('deleteTarea', { id }, 'No se pudo borrar la tarea.')
 
-  return { ...lista, crear, editar, completar, reabrir, eliminar }
+  return { ...lista, crear, editar, completar, cancelar, reabrir, eliminar }
 }

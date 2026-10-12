@@ -21,7 +21,7 @@
  *                  estado | asignadoA | creadoPor | fechaCreacion |
  *                  completadoPor | fechaCompletada
  *   "Sucursales":  id | nombre | direccion | activo
- *   "Usuarios":    usuario | password | rol | activo | sucursales
+ *   "Usuarios":    usuario | password | rol | activo | sucursales | nombre
  *   "Comentarios": id | tareaId | usuario | texto | fecha
  *
  * Roles:
@@ -45,7 +45,8 @@ var COL = {
   completadoPor: 10, fechaCompletada: 11
 };
 var COL_SUC = { id: 0, nombre: 1, direccion: 2, activo: 3 };
-var COL_USR = { usuario: 0, password: 1, rol: 2, activo: 3, sucursales: 4 };
+var COL_USR = { usuario: 0, password: 1, rol: 2, activo: 3, sucursales: 4, nombre: 5 };
+var ESTADOS = ['pendiente', 'completada', 'cancelada'];
 var COL_COM = { id: 0, tareaId: 1, usuario: 2, texto: 3, fecha: 4 };
 
 var PRIORIDADES = ['baja', 'media', 'alta', 'urgente'];
@@ -70,6 +71,10 @@ function doPost(e) {
       case 'createTarea':       return handleCreateTarea_(body);
       case 'updateTarea':       return handleUpdateTarea_(body);
       case 'completarTarea':    return handleCompletarTarea_(body);
+      case 'cancelarTarea':     return handleCancelarTarea_(body);
+      case 'importarLote':      return typeof handleImportarLote_ === 'function'
+                                  ? handleImportarLote_(body)
+                                  : jsonOut_({ ok: false, error: 'Importación no disponible.' });
       case 'reabrirTarea':      return handleReabrirTarea_(body);
       case 'deleteTarea':       return handleDeleteTarea_(body);
       case 'listComentarios':   return handleListComentarios_(body);
@@ -102,7 +107,7 @@ function doPost(e) {
 function handleLogin_(body) {
   var user = findUser_(body.usuario, body.password);
   if (!user) return jsonOut_({ ok: false, error: 'Usuario o contraseña incorrectos' });
-  return jsonOut_({ ok: true, usuario: user.usuario, rol: user.rol, sucursales: user.sucursales });
+  return jsonOut_({ ok: true, usuario: user.usuario, nombre: user.nombre, rol: user.rol, sucursales: user.sucursales });
 }
 
 /**
@@ -151,6 +156,7 @@ function findUser_(usuario, password) {
         usuario: rowUsuario,
         rol: normalizarRol_(rows[i][COL_USR.rol]),
         activo: true,
+        nombre: String(rows[i][COL_USR.nombre] || '').trim(),
         sucursales: parseSucursales_(rows[i][COL_USR.sucursales])
       };
     }
@@ -222,10 +228,11 @@ function validarSucursal_(sucursalId) {
 function handleListTareas_(body) {
   var user = requireAuth_(body);
   var rows = getSheet_(SHEET_TAREAS).getDataRange().getValues();
+  var nombres = mapaNombres_();
   var tareas = [];
   for (var i = 1; i < rows.length; i++) {
     if (!String(rows[i][COL.id]).trim()) continue;
-    var t = rowToTarea_(rows[i]);
+    var t = rowToTarea_(rows[i], nombres);
     if (puedeVer_(user, t)) tareas.push(t);
   }
   // Más recientes primero.
@@ -316,7 +323,7 @@ function handleUpdateTarea_(body) {
 function handleCompletarTarea_(body) {
   var user = requireRol_(body, ['admin', 'gerente']);
   var t = tareaGestionable_(user, String(body.id || '').trim());
-  if (t.tarea.estado === 'completada') throw new Error('La tarea ya está completada.');
+  if (t.tarea.estado !== 'pendiente') throw new Error('Solo se puede completar una tarea pendiente.');
 
   var nota = String(body.nota || '').trim();
   var lock = LockService.getScriptLock();
@@ -334,10 +341,31 @@ function handleCompletarTarea_(body) {
   return jsonOut_({ ok: true });
 }
 
+/** Cierra una tarea pendiente como cancelada (no se hará). Misma lógica que completar. */
+function handleCancelarTarea_(body) {
+  var user = requireRol_(body, ['admin', 'gerente']);
+  var t = tareaGestionable_(user, String(body.id || '').trim());
+  if (t.tarea.estado !== 'pendiente') throw new Error('Solo se puede cancelar una tarea pendiente.');
+
+  var nota = String(body.nota || '').trim();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    t.sheet.getRange(t.indice, COL.estado + 1).setValue('cancelada');
+    t.sheet.getRange(t.indice, COL.completadoPor + 1).setValue(user.usuario);
+    t.sheet.getRange(t.indice, COL.fechaCompletada + 1).setValue(new Date().toISOString());
+    bumpRevision_('tareas');
+  } finally {
+    lock.releaseLock();
+  }
+  if (nota) agregarComentario_(t.tarea.id, user.usuario, 'Cancelada: ' + nota);
+  return jsonOut_({ ok: true });
+}
+
 function handleReabrirTarea_(body) {
   var user = requireAdmin_(body);
   var t = tareaGestionable_(user, String(body.id || '').trim());
-  if (t.tarea.estado !== 'completada') throw new Error('La tarea no está completada.');
+  if (t.tarea.estado === 'pendiente') throw new Error('La tarea ya está abierta.');
 
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -394,6 +422,7 @@ function handleListComentarios_(body) {
   var user = requireAuth_(body);
   var t = tareaVisible_(user, String(body.tareaId || '').trim());
   var rows = getSheet_(SHEET_COMENTARIOS).getDataRange().getValues();
+  var nombres = mapaNombres_();
   var comentarios = [];
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][COL_COM.tareaId]).trim() !== t.tarea.id) continue;
@@ -401,6 +430,7 @@ function handleListComentarios_(body) {
       id: String(rows[i][COL_COM.id]),
       tareaId: t.tarea.id,
       usuario: String(rows[i][COL_COM.usuario]),
+      usuarioNombre: nombreDe_(nombres, rows[i][COL_COM.usuario]),
       texto: String(rows[i][COL_COM.texto]),
       fecha: normalizarFecha_(rows[i][COL_COM.fecha])
     });
@@ -563,7 +593,7 @@ function handleListPersonal_(body) {
     var sucursales = parseSucursales_(rows[i][COL_USR.sucursales]);
     // El gerente solo necesita ver al personal que cubre su sucursal.
     if (user.rol === 'gerente' && sucursales.indexOf(user.sucursales[0]) === -1) continue;
-    personal.push({ usuario: nombre, sucursales: sucursales });
+    personal.push({ usuario: nombre, nombre: String(rows[i][COL_USR.nombre] || '').trim(), sucursales: sucursales });
   }
   personal.sort(function (a, b) { return a.usuario.localeCompare(b.usuario); });
   return jsonOut_({ ok: true, personal: personal });
@@ -579,6 +609,7 @@ function handleListUsuarios_(body) {
     usuarios.push({
       usuario: nombre,
       rol: normalizarRol_(rows[i][COL_USR.rol]),
+      nombre: String(rows[i][COL_USR.nombre] || '').trim(),
       activo: esActivo_(rows[i][COL_USR.activo]),
       sucursales: parseSucursales_(rows[i][COL_USR.sucursales])
     });
@@ -592,6 +623,7 @@ function handleCreateUsuario_(body) {
   var password = String(body.nuevaPassword || '');
   var rol = normalizarRol_(body.rol);
   var activo = body.activo !== false;
+  var nombreCompleto = String(body.nombre || '').trim().slice(0, 80);
   var sucursales = validarSucursalesDeRol_(rol, body.sucursales);
 
   if (!nombre) throw new Error('El nombre de usuario es obligatorio.');
@@ -603,7 +635,7 @@ function handleCreateUsuario_(body) {
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    sheet.appendRow([nombre, password, rol, activo, sucursales.join(',')]);
+    sheet.appendRow([nombre, password, rol, activo, sucursales.join(','), nombreCompleto]);
     bumpRevision_('usuarios');
   } finally {
     lock.releaseLock();
@@ -617,6 +649,7 @@ function handleUpdateUsuario_(body) {
   if (!nombre) throw new Error('Falta el usuario a editar.');
   var rol = normalizarRol_(body.rol);
   var activo = body.activo !== false;
+  var nombreCompleto = String(body.nombre || '').trim().slice(0, 80);
   var nuevaPassword = String(body.nuevaPassword || '');
   var nuevoNombre = String(body.nuevoUsuario || '').trim().toUpperCase(); // nombres siempre en mayúsculas
   var sucursales = validarSucursalesDeRol_(rol, body.sucursales);
@@ -649,6 +682,12 @@ function handleUpdateUsuario_(body) {
     sheet.getRange(fila, COL_USR.rol + 1).setValue(rol);
     sheet.getRange(fila, COL_USR.activo + 1).setValue(activo);
     sheet.getRange(fila, COL_USR.sucursales + 1).setValue(sucursales.join(','));
+    // El nombre completo se muestra dentro de tareas y comentarios: si cambia, esas tablas también.
+    if (nombreCompleto !== String(encontrada.valores[COL_USR.nombre] || '').trim()) {
+      sheet.getRange(fila, COL_USR.nombre + 1).setValue(nombreCompleto);
+      bumpRevision_('tareas');
+      bumpRevision_('comentarios');
+    }
     if (nuevaPassword) sheet.getRange(fila, COL_USR.password + 1).setValue(nuevaPassword);
     bumpRevision_('usuarios');
   } finally {
@@ -737,7 +776,7 @@ var ENCABEZADOS = {
   Tareas: ['id', 'folio', 'sucursalId', 'titulo', 'descripcion', 'prioridad', 'estado',
            'asignadoA', 'creadoPor', 'fechaCreacion', 'completadoPor', 'fechaCompletada'],
   Sucursales: ['id', 'nombre', 'direccion', 'activo'],
-  Usuarios: ['usuario', 'password', 'rol', 'activo', 'sucursales'],
+  Usuarios: ['usuario', 'password', 'rol', 'activo', 'sucursales', 'nombre'],
   Comentarios: ['id', 'tareaId', 'usuario', 'texto', 'fecha']
 };
 
@@ -808,7 +847,7 @@ function aplicarValidaciones_(ss) {
 
   var tareas = ss.getSheetByName(SHEET_TAREAS);
   tareas.getRange(2, COL.prioridad + 1, filas, 1).setDataValidation(lista(PRIORIDADES));
-  tareas.getRange(2, COL.estado + 1, filas, 1).setDataValidation(lista(['pendiente', 'completada']));
+  tareas.getRange(2, COL.estado + 1, filas, 1).setDataValidation(lista(ESTADOS));
 
   ss.getSheetByName(SHEET_SUCURSALES).getRange(2, COL_SUC.activo + 1, filas, 1).setDataValidation(casilla);
 
@@ -853,21 +892,49 @@ function getSheet_(name) {
   return sheet;
 }
 
-function rowToTarea_(row) {
-  return {
+function rowToTarea_(row, nombres) {
+  var t = {
     id: String(row[COL.id]).trim(),
     folio: row[COL.folio] === '' ? '' : String(row[COL.folio]),
     sucursalId: String(row[COL.sucursalId]).trim(),
     titulo: String(row[COL.titulo]),
     descripcion: String(row[COL.descripcion]),
     prioridad: normalizarPrioridad_(row[COL.prioridad]),
-    estado: String(row[COL.estado]).trim().toLowerCase() === 'completada' ? 'completada' : 'pendiente',
+    estado: normalizarEstado_(row[COL.estado]),
     asignadoA: String(row[COL.asignadoA]).trim(),
     creadoPor: String(row[COL.creadoPor]),
     fechaCreacion: normalizarFecha_(row[COL.fechaCreacion]),
     completadoPor: String(row[COL.completadoPor]),
     fechaCompletada: normalizarFecha_(row[COL.fechaCompletada])
   };
+  // Nombres completos para mostrar (si no hay, se muestra el usuario tal cual).
+  t.asignadoNombre = nombreDe_(nombres, t.asignadoA);
+  t.creadoNombre = nombreDe_(nombres, t.creadoPor);
+  t.completadoNombre = nombreDe_(nombres, t.completadoPor);
+  return t;
+}
+
+/** { USUARIO_EN_MAYUSCULAS: nombre completo } de la pestaña Usuarios. */
+function mapaNombres_() {
+  var rows = getSheet_(SHEET_USUARIOS).getDataRange().getValues();
+  var mapa = {};
+  for (var i = 1; i < rows.length; i++) {
+    var u = String(rows[i][COL_USR.usuario]).trim().toUpperCase();
+    var n = String(rows[i][COL_USR.nombre] || '').trim();
+    if (u && n) mapa[u] = n;
+  }
+  return mapa;
+}
+
+function nombreDe_(nombres, usuario) {
+  var u = String(usuario || '').trim();
+  if (!u) return '';
+  return (nombres && nombres[u.toUpperCase()]) || u;
+}
+
+function normalizarEstado_(valor) {
+  var e = String(valor || '').trim().toLowerCase();
+  return ESTADOS.indexOf(e) === -1 ? 'pendiente' : e;
 }
 
 function rowToSucursal_(row) {

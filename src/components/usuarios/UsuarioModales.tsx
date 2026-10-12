@@ -110,6 +110,7 @@ export function NuevoUsuarioModal({
   crear: ReturnType<typeof useUsuarios>['crear']
 }) {
   const [usuario, setUsuario] = useState('')
+  const [nombreCompleto, setNombreCompleto] = useState('')
   const [password, setPassword] = useState('')
   const [rol, setRol] = useState<Rol>('personal')
   const [suc, setSuc] = useState<string[]>([])
@@ -119,6 +120,7 @@ export function NuevoUsuarioModal({
   useEffect(() => {
     if (abierto) {
       setUsuario('')
+      setNombreCompleto('')
       setPassword('')
       setRol('personal')
       setSuc([])
@@ -140,6 +142,7 @@ export function NuevoUsuarioModal({
     setError(null)
     const { error: err } = await crear({
       usuario: usuario.trim(),
+      nombre: nombreCompleto.trim(),
       password,
       rol,
       activo: true,
@@ -172,6 +175,9 @@ export function NuevoUsuarioModal({
       <div className="space-y-4">
         <Field label="Usuario *" hint="No distingue mayúsculas/minúsculas.">
           <Input value={usuario} onChange={(e) => setUsuario(e.target.value)} autoComplete="off" autoFocus />
+        </Field>
+        <Field label="Nombre completo" hint="Se muestra en la app en lugar del usuario.">
+          <Input value={nombreCompleto} onChange={(e) => setNombreCompleto(e.target.value)} maxLength={80} />
         </Field>
         <Field label="Contraseña inicial *">
           <Input
@@ -215,6 +221,7 @@ export function EditarUsuarioModal({
   editar: ReturnType<typeof useUsuarios>['editar']
 }) {
   const [nombre, setNombre] = useState('')
+  const [nombreCompleto, setNombreCompleto] = useState('')
   const [rol, setRol] = useState<Rol>('personal')
   const [suc, setSuc] = useState<string[]>([])
   const [activo, setActivo] = useState(true)
@@ -225,6 +232,7 @@ export function EditarUsuarioModal({
   useEffect(() => {
     if (!usuario) return
     setNombre(usuario.usuario)
+    setNombreCompleto(usuario.nombre)
     setRol(usuario.rol)
     setSuc(usuario.sucursales)
     setActivo(usuario.activo)
@@ -249,6 +257,7 @@ export function EditarUsuarioModal({
       rol,
       activo,
       sucursales: rol === 'admin' ? [] : suc,
+      nombre: nombreCompleto.trim(),
       nuevoUsuario: nombre.trim(),
       nuevaPassword,
     })
@@ -285,6 +294,9 @@ export function EditarUsuarioModal({
       <div className="space-y-4">
         <Field label="Usuario" hint="No distingue mayúsculas/minúsculas.">
           <Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoComplete="off" autoFocus />
+        </Field>
+        <Field label="Nombre completo" hint="Se muestra en la app en lugar del usuario.">
+          <Input value={nombreCompleto} onChange={(e) => setNombreCompleto(e.target.value)} maxLength={80} />
         </Field>
         <SelectorDeRol
           valor={rol}

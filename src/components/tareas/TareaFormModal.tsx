@@ -135,7 +135,7 @@ export function TareaFormModal({
               {asignadoFueraDeLista && <option value={asignadoA}>{asignadoA}</option>}
               {asignables.map((p) => (
                 <option key={p.usuario} value={p.usuario}>
-                  {p.usuario}
+                  {p.nombre ? `${p.nombre} (${p.usuario})` : p.usuario}
                 </option>
               ))}
             </Select>

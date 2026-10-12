@@ -16,7 +16,7 @@ const NAV_SUCURSALES = { to: '/sucursales', label: 'Sucursales', end: false }
 const NAV_USUARIOS = { to: '/usuarios', label: 'Usuarios', end: false }
 
 export default function AppLayout() {
-  const { usuario, rol, esAdmin, signOut } = useAuth()
+  const { usuario, nombre, rol, esAdmin, signOut } = useAuth()
   const navigate = useNavigate()
   const [modalPassword, setModalPassword] = useState(false)
   const { forzando, forzar } = useForzarActualizacion()
@@ -60,7 +60,7 @@ export default function AppLayout() {
 
           <div className="ml-auto flex items-center gap-2">
             <div className="hidden text-right sm:block">
-              <p className="text-xs font-medium text-foreground">{usuario}</p>
+              <p className="text-xs font-medium text-foreground">{nombre}</p>
               <p className="text-[11px] text-muted-foreground">{rol ? ROL_LABEL[rol] : ''}</p>
             </div>
             <Button

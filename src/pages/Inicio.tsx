@@ -16,7 +16,7 @@ interface Modulo {
 }
 
 export default function Inicio() {
-  const { usuario, rol, esAdmin, esPersonal } = useAuth()
+  const { nombre, rol, esAdmin, esPersonal } = useAuth()
   const { data: tareas, loading } = useTareas()
   const { nombres } = useSucursales()
 
@@ -65,7 +65,7 @@ export default function Inicio() {
   return (
     <div>
       <div className="mb-7">
-        <h1 className="text-xl font-semibold text-foreground">Hola{usuario ? `, ${usuario}` : ''}</h1>
+        <h1 className="text-xl font-semibold text-foreground">Hola{nombre ? `, ${nombre}` : ''}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{rol ? ROL_LABEL[rol] : ''}</p>
       </div>
 

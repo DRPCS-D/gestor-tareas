@@ -1,4 +1,4 @@
-import { CheckCircle2, Pencil, RotateCcw, Send, Trash2 } from 'lucide-react'
+import { Ban, CheckCircle2, Pencil, RotateCcw, Send, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/field'
 import { Modal } from '@/components/ui/modal'
 import { useComentarios } from '@/hooks/useComentarios'
 import { formatFechaHora } from '@/lib/format'
-import type { Tarea } from '@/lib/tipos'
+import { ESTADO_LABEL, type Tarea } from '@/lib/tipos'
 import { BadgeEstado, BadgePrioridad } from './badges'
 
 function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
@@ -27,6 +27,7 @@ export function TareaDetalleModal({
   onCerrar,
   onEditar,
   onCompletar,
+  onCancelar,
   onReabrir,
   onBorrar,
 }: {
@@ -38,6 +39,7 @@ export function TareaDetalleModal({
   onCerrar: () => void
   onEditar: () => void
   onCompletar: () => void
+  onCancelar: () => void
   onReabrir: () => void
   onBorrar: () => void
 }) {
@@ -85,9 +87,14 @@ export function TareaDetalleModal({
               <Pencil /> Editar
             </Button>
             {tarea.estado === 'pendiente' ? (
-              <Button onClick={onCompletar}>
-                <CheckCircle2 /> Completar
-              </Button>
+              <>
+                <Button variant="outline" onClick={onCancelar}>
+                  <Ban /> Cancelar tarea
+                </Button>
+                <Button onClick={onCompletar}>
+                  <CheckCircle2 /> Completar
+                </Button>
+              </>
             ) : (
               esAdmin && (
                 <Button onClick={onReabrir}>
@@ -112,13 +119,15 @@ export function TareaDetalleModal({
 
           <dl className="grid gap-3 sm:grid-cols-2">
             <Dato etiqueta="Sucursal">{nombreSucursal}</Dato>
-            <Dato etiqueta="Asignada a">{tarea.asignadoA || 'Sin asignar'}</Dato>
+            <Dato etiqueta="Asignada a">{tarea.asignadoNombre || tarea.asignadoA || 'Sin asignar'}</Dato>
             <Dato etiqueta="Registrada">
-              {formatFechaHora(tarea.fechaCreacion)} por {tarea.creadoPor}
+              {formatFechaHora(tarea.fechaCreacion)} por {tarea.creadoNombre || tarea.creadoPor}
             </Dato>
-            {tarea.estado === 'completada' && (
-              <Dato etiqueta="Completada">
-                {formatFechaHora(tarea.fechaCompletada)} por {tarea.completadoPor}
+            {tarea.estado !== 'pendiente' && (
+              <Dato etiqueta={ESTADO_LABEL[tarea.estado]}>
+                {[tarea.fechaCompletada && formatFechaHora(tarea.fechaCompletada), (tarea.completadoNombre || tarea.completadoPor) && `por ${tarea.completadoNombre || tarea.completadoPor}`]
+                  .filter(Boolean)
+                  .join(' ') || '—'}
               </Dato>
             )}
           </dl>
@@ -136,7 +145,7 @@ export function TareaDetalleModal({
                 {comentarios.map((c) => (
                   <li key={c.id} className="rounded-md bg-secondary px-3 py-2">
                     <p className="text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">{c.usuario}</span> · {formatFechaHora(c.fecha)}
+                      <span className="font-medium text-foreground">{c.usuarioNombre || c.usuario}</span> · {formatFechaHora(c.fecha)}
                     </p>
                     <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{c.texto}</p>
                   </li>

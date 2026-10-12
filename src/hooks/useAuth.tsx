@@ -15,6 +15,8 @@ import type { Rol } from '@/lib/tipos'
 
 interface AuthState {
   usuario: string | null
+  /** Nombre completo, o el usuario si no tiene. */
+  nombre: string | null
   rol: Rol | null
   /** Ids de sucursal del usuario (gerente: una; personal: varias; admin: ninguna). */
   sucursales: string[]
@@ -48,9 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (usuario: string, password: string) => {
     try {
-      const data = await callApi<{ usuario: string; rol: Rol; sucursales?: string[] }>('login', { usuario, password })
+      const data = await callApi<{ usuario: string; nombre?: string; rol: Rol; sucursales?: string[] }>('login', { usuario, password })
       const nueva: Sesion = {
         usuario: data.usuario || usuario,
+        nombre: data.nombre || '',
         password,
         rol: data.rol,
         sucursales: data.sucursales ?? [],
@@ -102,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const valor = useMemo<AuthState>(
     () => ({
       usuario: sesion?.usuario ?? null,
+      nombre: sesion ? sesion.nombre || sesion.usuario : null,
       rol: sesion?.rol ?? null,
       sucursales: sesion?.sucursales ?? [],
       esAdmin: sesion?.rol === 'admin',

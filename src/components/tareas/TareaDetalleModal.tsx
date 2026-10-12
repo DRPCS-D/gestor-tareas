@@ -72,7 +72,7 @@ export function TareaDetalleModal({
       abierto={tarea !== null}
       titulo={tarea ? `#${tarea.folio} — ${tarea.titulo}` : ''}
       onCerrar={onCerrar}
-      ancho="max-w-xl"
+      ancho="max-w-3xl"
       footer={
         puedeGestionar && tarea ? (
           <>

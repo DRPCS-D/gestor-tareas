@@ -5,7 +5,7 @@
       "name": "gestor-tareas",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "--port", "5177"],
-      "cwd": "E:\claude\gestor-tareas",
+      "cwd": "E:/claude/gestor-tareas",
       "port": 5177
     }
   ]

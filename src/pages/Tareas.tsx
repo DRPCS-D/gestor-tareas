@@ -18,7 +18,6 @@ import { useTareas } from '@/hooks/useTareas'
 import { formatFecha, normalizar, recortar } from '@/lib/format'
 import { PRIORIDADES, PRIORIDAD_LABEL, type EstadoTarea, type Prioridad, type Tarea } from '@/lib/tipos'
 
-const ORDEN_PRIORIDAD: Record<Prioridad, number> = { urgente: 0, alta: 1, media: 2, baja: 3 }
 
 export default function Tareas() {
   const { esAdmin, esGerente, esPersonal, puedeGestionar, sucursales: misSucursales } = useAuth()
@@ -55,12 +54,7 @@ export default function Tareas() {
             normalizar(String(v)).includes(q),
           ),
       )
-      .sort(
-        (a, b) =>
-          Number(a.estado === 'completada') - Number(b.estado === 'completada') ||
-          ORDEN_PRIORIDAD[a.prioridad] - ORDEN_PRIORIDAD[b.prioridad] ||
-          b.fechaCreacion.localeCompare(a.fechaCreacion),
-      )
+      .sort((a, b) => b.fechaCreacion.localeCompare(a.fechaCreacion))
   }, [data, busqueda, fEstado, fPrioridad, fSucursal, nombres])
 
   /** Ejecuta una acción sobre una tarea, avisa y recarga. */

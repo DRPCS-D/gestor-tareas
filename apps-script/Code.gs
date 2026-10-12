@@ -16,13 +16,16 @@
  * Script) o proyecto independiente (script.google.com), en cuyo caso crea el
  * Sheet "Gestor de Tareas" en tu Drive y guarda su ID en SPREADSHEET_ID.
  *
- * La hoja debe tener cuatro pestañas (fila 1 = encabezados):
+ * La hoja debe tener cinco pestañas (fila 1 = encabezados):
  *   "Tareas":      id | folio | sucursalId | titulo | descripcion | prioridad |
  *                  estado | asignadoA | creadoPor | fechaCreacion |
- *                  completadoPor | fechaCompletada
+ *                  completadoPor | fechaCompletada | programadaId
  *   "Sucursales":  id | nombre | direccion | activo
  *   "Usuarios":    usuario | password | rol | activo | sucursales | nombre
  *   "Comentarios": id | tareaId | usuario | texto | fecha
+ *   "Programadas": id | titulo | descripcion | prioridad | sucursalId | asignadoA |
+ *                  tipo | intervalo | diasSemana | diaMes | hora | fechaInicio |
+ *                  fechaFin | activo | creadoPor | fechaCreacion | ultimaOcurrencia
  *
  * Roles:
  *   admin    control total.
@@ -37,12 +40,13 @@ var SHEET_TAREAS = 'Tareas';
 var SHEET_SUCURSALES = 'Sucursales';
 var SHEET_USUARIOS = 'Usuarios';
 var SHEET_COMENTARIOS = 'Comentarios';
+var SHEET_PROGRAMADAS = 'Programadas';
 
 // Índices de columnas (0-based).
 var COL = {
   id: 0, folio: 1, sucursalId: 2, titulo: 3, descripcion: 4, prioridad: 5,
   estado: 6, asignadoA: 7, creadoPor: 8, fechaCreacion: 9,
-  completadoPor: 10, fechaCompletada: 11
+  completadoPor: 10, fechaCompletada: 11, programadaId: 12
 };
 var COL_SUC = { id: 0, nombre: 1, direccion: 2, activo: 3 };
 var COL_USR = { usuario: 0, password: 1, rol: 2, activo: 3, sucursales: 4, nombre: 5 };
@@ -72,6 +76,11 @@ function doPost(e) {
       case 'updateTarea':       return handleUpdateTarea_(body);
       case 'completarTarea':    return handleCompletarTarea_(body);
       case 'cancelarTarea':     return handleCancelarTarea_(body);
+      case 'listProgramadas':   return handleListProgramadas_(body);
+      case 'createProgramada':  return handleCreateProgramada_(body);
+      case 'updateProgramada':  return handleUpdateProgramada_(body);
+      case 'deleteProgramada':  return handleDeleteProgramada_(body);
+      case 'ejecutarProgramada': return handleEjecutarProgramada_(body);
       case 'importarLote':      return typeof handleImportarLote_ === 'function'
                                   ? handleImportarLote_(body)
                                   : jsonOut_({ ok: false, error: 'Importación no disponible.' });
@@ -274,6 +283,7 @@ function handleCreateTarea_(body) {
     fila[COL.fechaCreacion] = new Date().toISOString();
     fila[COL.completadoPor] = '';
     fila[COL.fechaCompletada] = '';
+    fila[COL.programadaId] = '';
     sheet.appendRow(fila);
     bumpRevision_('tareas');
   } finally {
@@ -476,7 +486,7 @@ function handleGetRevisions_(body) {
   requireAuth_(body);
   var props = PropertiesService.getScriptProperties();
   var revisiones = {};
-  ['tareas', 'sucursales', 'usuarios', 'comentarios'].forEach(function (k) {
+  ['tareas', 'sucursales', 'usuarios', 'comentarios', 'programadas'].forEach(function (k) {
     revisiones[k] = Number(props.getProperty('rev_' + k)) || 0;
   });
   return jsonOut_({ ok: true, revisiones: revisiones });
@@ -770,14 +780,409 @@ function validarSucursalesDeRol_(rol, valor) {
   return lista;
 }
 
+// ---------- Tareas programadas ----------
+// Una programada es una plantilla (qué tarea, en qué sucursal, a quién) más
+// cuándo se repite. Un disparador (cada hora) crea la tarea real en la lista
+// principal cuando llega su fecha. Todas las fechas y horas se calculan en la
+// zona horaria del proyecto (appsscript.json) y se guardan como texto.
+
+var COL_PRG = {
+  id: 0, titulo: 1, descripcion: 2, prioridad: 3, sucursalId: 4, asignadoA: 5,
+  tipo: 6, intervalo: 7, diasSemana: 8, diaMes: 9, hora: 10, fechaInicio: 11,
+  fechaFin: 12, activo: 13, creadoPor: 14, fechaCreacion: 15, ultima: 16
+};
+var TIPOS_PRG = ['una', 'dias', 'semanal', 'mensual'];
+// Si el disparador estuvo caído, solo se crea la última ocurrencia pendiente y
+// solo si es reciente: no se llena la lista de tareas viejas.
+var GRACIA_MS = 36 * 3600 * 1000;
+var MAX_DIAS_BUSQUEDA = 3660;
+
+function tz_() { return Session.getScriptTimeZone(); }
+
+/** Ahora, en hora local, como 'yyyy-MM-dd HH:mm' (se compara como texto). */
+function ahoraLocal_() { return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm'); }
+
+/** 'yyyy-MM-dd HH:mm' (hora local) -> ISO en UTC. */
+function localAIso_(local) { return Utilities.parseDate(local, tz_(), 'yyyy-MM-dd HH:mm').toISOString(); }
+
+/** Número de día (días desde 1970) de un 'yyyy-MM-dd'. Sirve para recorrer fechas sin husos. */
+function numDia_(fecha) {
+  var p = String(fecha).split('-');
+  return Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])) / 86400000;
+}
+function fechaDeNum_(n) { return new Date(n * 86400000).toISOString().slice(0, 10); }
+function fechaValida_(s) { return /^\d{4}-\d{2}-\d{2}$/.test(s) && fechaDeNum_(numDia_(s)) === s; }
+/** 1 = lunes ... 7 = domingo */
+function diaSemanaIso_(n) { var d = new Date(n * 86400000).getUTCDay(); return d === 0 ? 7 : d; }
+function diasEnMes_(anio, mes) { return new Date(Date.UTC(anio, mes, 0)).getUTCDate(); }
+
+/** ¿La programada tiene una ocurrencia el día `n`? */
+function ocurreEn_(p, n) {
+  var ini = numDia_(p.fechaInicio);
+  if (n < ini) return false;
+  if (p.fechaFin && n > numDia_(p.fechaFin)) return false;
+  if (p.tipo === 'una') return n === ini;
+  if (p.tipo === 'dias') return (n - ini) % p.intervalo === 0;
+  if (p.tipo === 'semanal') {
+    if (p.diasSemana.indexOf(diaSemanaIso_(n)) === -1) return false;
+    var lunes = ini - (diaSemanaIso_(ini) - 1);
+    return Math.floor((n - lunes) / 7) % p.intervalo === 0;
+  }
+  if (p.tipo === 'mensual') {
+    var f = new Date(n * 86400000);
+    var g = new Date(ini * 86400000);
+    var meses = (f.getUTCFullYear() - g.getUTCFullYear()) * 12 + (f.getUTCMonth() - g.getUTCMonth());
+    if (meses % p.intervalo !== 0) return false;
+    // Si el mes no tiene ese día (31 en abril), cae el último día del mes.
+    return f.getUTCDate() === Math.min(p.diaMes, diasEnMes_(f.getUTCFullYear(), f.getUTCMonth() + 1));
+  }
+  return false;
+}
+
+/** Ocurrencias ('yyyy-MM-dd HH:mm') mayores que `desde` y hasta `hasta` inclusive. */
+function ocurrenciasEntre_(p, desde, hasta) {
+  var res = [];
+  var n0 = Math.max(numDia_(desde.slice(0, 10)), numDia_(p.fechaInicio));
+  var n1 = numDia_(hasta.slice(0, 10));
+  for (var n = n0; n <= n1 && n - n0 <= MAX_DIAS_BUSQUEDA; n++) {
+    if (!ocurreEn_(p, n)) continue;
+    var s = fechaDeNum_(n) + ' ' + p.hora;
+    if (s > desde && s <= hasta) res.push(s);
+  }
+  return res;
+}
+
+/** Primera ocurrencia posterior a `desde`, o '' si ya no hay más. */
+function proximaOcurrencia_(p, desde) {
+  var n0 = Math.max(numDia_(desde.slice(0, 10)), numDia_(p.fechaInicio));
+  var tope = p.fechaFin ? numDia_(p.fechaFin) : Infinity;
+  for (var n = n0; n <= tope && n - n0 <= MAX_DIAS_BUSQUEDA; n++) {
+    if (!ocurreEn_(p, n)) continue;
+    var s = fechaDeNum_(n) + ' ' + p.hora;
+    if (s > desde) return s;
+  }
+  return '';
+}
+
+/** Texto de la hoja; si Sheets lo convirtió en fecha, se vuelve a formatear. */
+function textoLocal_(v, formato) {
+  if (v instanceof Date) return Utilities.formatDate(v, tz_(), formato);
+  return String(v == null ? '' : v).trim();
+}
+
+function rowToProgramada_(row, nombres) {
+  var tipo = String(row[COL_PRG.tipo]).trim().toLowerCase();
+  var p = {
+    id: String(row[COL_PRG.id]).trim(),
+    titulo: String(row[COL_PRG.titulo]),
+    descripcion: String(row[COL_PRG.descripcion]),
+    prioridad: normalizarPrioridad_(row[COL_PRG.prioridad]),
+    sucursalId: String(row[COL_PRG.sucursalId]).trim(),
+    asignadoA: String(row[COL_PRG.asignadoA]).trim(),
+    tipo: TIPOS_PRG.indexOf(tipo) === -1 ? 'una' : tipo,
+    intervalo: Math.max(1, parseInt(row[COL_PRG.intervalo], 10) || 1),
+    diasSemana: String(row[COL_PRG.diasSemana] || '').split(',').map(Number).filter(function (n) { return n >= 1 && n <= 7; }),
+    diaMes: parseInt(row[COL_PRG.diaMes], 10) || 1,
+    hora: textoLocal_(row[COL_PRG.hora], 'HH:mm') || '08:00',
+    fechaInicio: textoLocal_(row[COL_PRG.fechaInicio], 'yyyy-MM-dd'),
+    fechaFin: textoLocal_(row[COL_PRG.fechaFin], 'yyyy-MM-dd'),
+    activo: esActivo_(row[COL_PRG.activo]),
+    creadoPor: String(row[COL_PRG.creadoPor]).trim(),
+    fechaCreacion: normalizarFecha_(row[COL_PRG.fechaCreacion]),
+    ultima: textoLocal_(row[COL_PRG.ultima], 'yyyy-MM-dd HH:mm')
+  };
+  p.asignadoNombre = nombreDe_(nombres, p.asignadoA);
+  p.creadoNombre = nombreDe_(nombres, p.creadoPor);
+  return p;
+}
+
+function filaProgramada_(p) {
+  return [p.id, p.titulo, p.descripcion, p.prioridad, p.sucursalId, p.asignadoA, p.tipo, p.intervalo,
+          p.diasSemana.join(','), p.diaMes, p.hora, p.fechaInicio, p.fechaFin, p.activo ? 'TRUE' : 'FALSE',
+          p.creadoPor, p.fechaCreacion, p.ultima];
+}
+
+/** Escribe una fila como texto (agranda la hoja si hace falta). */
+function escribirFilaTexto_(sheet, indice, fila) {
+  var faltan = indice - sheet.getMaxRows();
+  if (faltan > 0) sheet.insertRowsAfter(sheet.getMaxRows(), faltan);
+  sheet.getRange(indice, 1, 1, fila.length).setNumberFormat('@').setValues([fila.map(String)]);
+}
+
+/** Valida y normaliza los datos de una programada que llegan del frontend. */
+function datosProgramada_(body) {
+  var titulo = String(body.titulo || '').trim().slice(0, 80);
+  if (!titulo) throw new Error('El título es obligatorio.');
+  var tipo = String(body.tipo || '');
+  if (TIPOS_PRG.indexOf(tipo) === -1) throw new Error('Elige cada cuánto se repite.');
+
+  var hora = String(body.hora || '08:00').trim();
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) throw new Error('La hora no es válida.');
+  var fechaInicio = String(body.fechaInicio || '').trim();
+  if (!fechaValida_(fechaInicio)) throw new Error('La fecha no es válida.');
+  var fechaFin = tipo === 'una' ? '' : String(body.fechaFin || '').trim();
+  if (fechaFin) {
+    if (!fechaValida_(fechaFin)) throw new Error('La fecha final no es válida.');
+    if (fechaFin < fechaInicio) throw new Error('La fecha final no puede ser anterior al inicio.');
+  }
+
+  var intervalo = 1, diasSemana = [], diaMes = 1;
+  if (tipo === 'dias') {
+    intervalo = parseInt(body.intervalo, 10);
+    if (!(intervalo >= 1 && intervalo <= 365)) throw new Error('Indica cada cuántos días (1 a 365).');
+  } else if (tipo === 'semanal') {
+    intervalo = parseInt(body.intervalo, 10) || 1;
+    if (!(intervalo >= 1 && intervalo <= 12)) throw new Error('Indica cada cuántas semanas (1 a 12).');
+    var vistos = {};
+    (Array.isArray(body.diasSemana) ? body.diasSemana : []).forEach(function (d) {
+      d = parseInt(d, 10);
+      if (d >= 1 && d <= 7) vistos[d] = true;
+    });
+    diasSemana = Object.keys(vistos).map(Number).sort();
+    if (!diasSemana.length) throw new Error('Elige al menos un día de la semana.');
+  } else if (tipo === 'mensual') {
+    intervalo = parseInt(body.intervalo, 10) || 1;
+    if (!(intervalo >= 1 && intervalo <= 12)) throw new Error('Indica cada cuántos meses (1 a 12).');
+    diaMes = parseInt(body.diaMes, 10);
+    if (!(diaMes >= 1 && diaMes <= 31)) throw new Error('Indica el día del mes (1 a 31).');
+  }
+
+  return {
+    titulo: titulo,
+    descripcion: String(body.descripcion || '').trim().slice(0, 2000),
+    prioridad: normalizarPrioridad_(body.prioridad),
+    tipo: tipo, intervalo: intervalo, diasSemana: diasSemana, diaMes: diaMes,
+    hora: hora, fechaInicio: fechaInicio, fechaFin: fechaFin
+  };
+}
+
+function programadaGestionable_(user, p) {
+  if (user.rol === 'admin') return true;
+  return user.rol === 'gerente' && user.sucursales.indexOf(p.sucursalId) !== -1;
+}
+
+function programadaPorId_(user, id) {
+  var sheet = getSheet_(SHEET_PROGRAMADAS);
+  var encontrada = filaPorId_(sheet, COL_PRG.id, id);
+  if (!encontrada) throw new Error('La tarea programada ya no existe.');
+  var p = rowToProgramada_(encontrada.valores);
+  if (!programadaGestionable_(user, p)) throw new Error('No tienes acceso a esta tarea programada.');
+  return { sheet: sheet, indice: encontrada.indice, p: p };
+}
+
+/** El horario cambió si alguno de estos campos es distinto: entonces no se recupera lo anterior. */
+function firmaHorario_(p) {
+  return [p.tipo, p.intervalo, p.diasSemana.join(','), p.diaMes, p.hora, p.fechaInicio, p.fechaFin].join('|');
+}
+
+function handleListProgramadas_(body) {
+  var user = requireRol_(body, ['admin', 'gerente']);
+  var rows = getSheet_(SHEET_PROGRAMADAS).getDataRange().getValues();
+  var nombres = mapaNombres_();
+  var ahora = ahoraLocal_();
+  var lista = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (!String(rows[i][COL_PRG.id]).trim()) continue;
+    var p = rowToProgramada_(rows[i], nombres);
+    if (!programadaGestionable_(user, p)) continue;
+    p.proxima = p.activo ? proximaOcurrencia_(p, p.ultima > ahora ? p.ultima : ahora) : '';
+    lista.push(p);
+  }
+  // Las que tocan antes primero; pausadas y finalizadas al final.
+  lista.sort(function (a, b) {
+    if (!a.proxima !== !b.proxima) return a.proxima ? -1 : 1;
+    return (a.proxima || a.titulo).localeCompare(b.proxima || b.titulo);
+  });
+  return jsonOut_({ ok: true, programadas: lista });
+}
+
+function handleCreateProgramada_(body) {
+  var user = requireRol_(body, ['admin', 'gerente']);
+  var d = datosProgramada_(body);
+
+  var sucursalId = user.rol === 'gerente' ? user.sucursales[0] : String(body.sucursalId || '').trim();
+  if (user.rol === 'gerente' && !sucursalId) throw new Error('No tienes una sucursal asignada.');
+  sucursalId = validarSucursal_(sucursalId);
+  var asignadoA = validarAsignado_(body.asignadoA, sucursalId);
+
+  var p = d;
+  p.id = Utilities.getUuid();
+  p.sucursalId = sucursalId;
+  p.asignadoA = asignadoA;
+  p.activo = true;
+  p.creadoPor = user.usuario;
+  p.fechaCreacion = new Date().toISOString();
+  // Lo que ya pasó no genera tareas: se cuenta desde este momento.
+  p.ultima = ahoraLocal_();
+  if (proximaOcurrencia_(p, p.ultima) === '') throw new Error('Con esas fechas no se generaría ninguna tarea: la fecha ya pasó.');
+
+  var sheet = getSheet_(SHEET_PROGRAMADAS);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    escribirFilaTexto_(sheet, sheet.getLastRow() + 1, filaProgramada_(p));
+    bumpRevision_('programadas');
+  } finally {
+    lock.releaseLock();
+  }
+  return jsonOut_({ ok: true });
+}
+
+function handleUpdateProgramada_(body) {
+  var user = requireRol_(body, ['admin', 'gerente']);
+  var x = programadaPorId_(user, String(body.id || '').trim());
+  var d = datosProgramada_(body);
+
+  // Solo el admin puede mover una programada de sucursal.
+  var sucursalId = user.rol === 'admin' && body.sucursalId ? validarSucursal_(String(body.sucursalId).trim()) : x.p.sucursalId;
+  var asignadoA = validarAsignado_(body.asignadoA, sucursalId);
+  var activo = body.activo !== false;
+
+  var p = x.p;
+  var firmaAntes = firmaHorario_(p);
+  var estabaActiva = p.activo;
+  Object.keys(d).forEach(function (k) { p[k] = d[k]; });
+  p.sucursalId = sucursalId;
+  p.asignadoA = asignadoA;
+  p.activo = activo;
+  // Si cambia el horario o se reactiva, se cuenta desde ahora (no se recuperan fechas pasadas).
+  if (firmaHorario_(p) !== firmaAntes || (!estabaActiva && activo)) p.ultima = ahoraLocal_();
+  if (activo && proximaOcurrencia_(p, p.ultima || ahoraLocal_()) === '') {
+    throw new Error('Con esas fechas no se generaría ninguna tarea: la fecha ya pasó.');
+  }
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    escribirFilaTexto_(x.sheet, x.indice, filaProgramada_(p));
+    bumpRevision_('programadas');
+  } finally {
+    lock.releaseLock();
+  }
+  return jsonOut_({ ok: true });
+}
+
+function handleDeleteProgramada_(body) {
+  var user = requireRol_(body, ['admin', 'gerente']);
+  var x = programadaPorId_(user, String(body.id || '').trim());
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    borrarFila_(x.sheet, x.indice);
+    bumpRevision_('programadas');
+  } finally {
+    lock.releaseLock();
+  }
+  return jsonOut_({ ok: true });
+}
+
+/** Crea ahora una tarea a partir de la plantilla, sin tocar su calendario. */
+function handleEjecutarProgramada_(body) {
+  var user = requireRol_(body, ['admin', 'gerente']);
+  var x = programadaPorId_(user, String(body.id || '').trim());
+  validarSucursal_(x.p.sucursalId);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  var folio;
+  try {
+    folio = crearTareaProgramada_(getSheet_(SHEET_TAREAS), x.p, new Date().toISOString());
+    bumpRevision_('tareas');
+  } finally {
+    lock.releaseLock();
+  }
+  return jsonOut_({ ok: true, folio: folio });
+}
+
+/** Agrega la tarea real a la hoja (debe llamarse con el lock tomado). Devuelve su folio. */
+function crearTareaProgramada_(sheetT, p, fechaIso) {
+  var asignado = '';
+  // Si el asignado ya no sirve (desactivado o sin esa sucursal), la tarea nace sin asignar.
+  try { asignado = validarAsignado_(p.asignadoA, p.sucursalId); } catch (e) { asignado = ''; }
+  var folio = siguienteFolio_(sheetT);
+  var fila = [];
+  fila[COL.id] = Utilities.getUuid();
+  fila[COL.folio] = folio;
+  fila[COL.sucursalId] = p.sucursalId;
+  fila[COL.titulo] = p.titulo;
+  fila[COL.descripcion] = p.descripcion;
+  fila[COL.prioridad] = p.prioridad;
+  fila[COL.estado] = 'pendiente';
+  fila[COL.asignadoA] = asignado;
+  fila[COL.creadoPor] = p.creadoPor;
+  fila[COL.fechaCreacion] = fechaIso;
+  fila[COL.completadoPor] = '';
+  fila[COL.fechaCompletada] = '';
+  fila[COL.programadaId] = p.id;
+  sheetT.appendRow(fila);
+  return folio;
+}
+
+/**
+ * Punto de entrada del disparador (cada hora). Para cada programada activa
+ * crea la tarea de su última ocurrencia pendiente y avanza su calendario.
+ * Es seguro ejecutarla varias veces: cada ocurrencia se crea una sola vez.
+ */
+function generarProgramadas() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(25000)) return;
+  try {
+    var sheetP = getSheet_(SHEET_PROGRAMADAS);
+    var sheetT = getSheet_(SHEET_TAREAS);
+    var rows = sheetP.getDataRange().getValues();
+    var ahora = ahoraLocal_();
+    var ahoraMs = new Date().getTime();
+    var creadas = 0, cambios = 0;
+
+    for (var i = 1; i < rows.length; i++) {
+      if (!String(rows[i][COL_PRG.id]).trim()) continue;
+      var p = rowToProgramada_(rows[i]);
+      if (!p.activo) continue;
+
+      var debidas = ocurrenciasEntre_(p, p.ultima || ahora, ahora);
+      if (!debidas.length) continue;
+      var ultima = debidas[debidas.length - 1];
+
+      if (ahoraMs - Utilities.parseDate(ultima, tz_(), 'yyyy-MM-dd HH:mm').getTime() <= GRACIA_MS) {
+        var sucursalOk = true;
+        try { validarSucursal_(p.sucursalId); } catch (e) { sucursalOk = false; }
+        if (sucursalOk) {
+          crearTareaProgramada_(sheetT, p, localAIso_(ultima));
+          creadas++;
+        }
+      }
+      p.ultima = ultima;
+      // Una programada de una sola vez termina al cumplirse.
+      if (p.tipo === 'una') p.activo = false;
+      escribirFilaTexto_(sheetP, i + 1, filaProgramada_(p));
+      cambios++;
+    }
+
+    if (cambios) bumpRevision_('programadas');
+    if (creadas) bumpRevision_('tareas');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Deja un único disparador por hora que llama a generarProgramadas. */
+function instalarDisparador_() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'generarProgramadas') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('generarProgramadas').timeBased().everyHours(1).create();
+}
+
 // ---------- Instalación ----------
 
 var ENCABEZADOS = {
   Tareas: ['id', 'folio', 'sucursalId', 'titulo', 'descripcion', 'prioridad', 'estado',
-           'asignadoA', 'creadoPor', 'fechaCreacion', 'completadoPor', 'fechaCompletada'],
+           'asignadoA', 'creadoPor', 'fechaCreacion', 'completadoPor', 'fechaCompletada', 'programadaId'],
   Sucursales: ['id', 'nombre', 'direccion', 'activo'],
   Usuarios: ['usuario', 'password', 'rol', 'activo', 'sucursales', 'nombre'],
-  Comentarios: ['id', 'tareaId', 'usuario', 'texto', 'fecha']
+  Comentarios: ['id', 'tareaId', 'usuario', 'texto', 'fecha'],
+  Programadas: ['id', 'titulo', 'descripcion', 'prioridad', 'sucursalId', 'asignadoA', 'tipo', 'intervalo',
+                'diasSemana', 'diaMes', 'hora', 'fechaInicio', 'fechaFin', 'activo', 'creadoPor',
+                'fechaCreacion', 'ultimaOcurrencia']
 };
 
 /** Agrega el menú "Gestor de Tareas" al abrir la hoja. */
@@ -785,6 +1190,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Gestor de Tareas')
     .addItem('Instalar / reparar hoja', 'instalar')
+    .addItem('Generar tareas programadas ahora', 'generarProgramadas')
     .addToUi();
 }
 
@@ -815,6 +1221,10 @@ function instalar() {
 
   aplicarValidaciones_(ss);
 
+  // Programadas guarda todo como texto: si no, Sheets convierte fechas y horas en valores de fecha.
+  var prg = ss.getSheetByName(SHEET_PROGRAMADAS);
+  prg.getRange(1, 1, prg.getMaxRows(), ENCABEZADOS.Programadas.length).setNumberFormat('@');
+
   var mensaje = creadas.length ? 'Pestañas creadas: ' + creadas.join(', ') + '. ' : 'Las pestañas ya existían. ';
 
   var sucursales = ss.getSheetByName(SHEET_SUCURSALES);
@@ -830,6 +1240,9 @@ function instalar() {
     mensaje += 'Admin inicial: usuario ADMIN, contraseña ' + password +
       ' (también está en la pestaña Usuarios; cámbiala al entrar). ';
   }
+
+  instalarDisparador_();
+  mensaje += 'Disparador de tareas programadas activo (cada hora). ';
 
   mensaje += 'Hoja: ' + ss.getUrl();
   Logger.log(mensaje);
@@ -853,6 +1266,9 @@ function aplicarValidaciones_(ss) {
 
   var usuarios = ss.getSheetByName(SHEET_USUARIOS);
   usuarios.getRange(2, COL_USR.rol + 1, filas, 1).setDataValidation(lista(['admin', 'gerente', 'personal']));
+  var programadas = ss.getSheetByName(SHEET_PROGRAMADAS);
+  programadas.getRange(2, COL_PRG.prioridad + 1, filas, 1).setDataValidation(lista(PRIORIDADES));
+  programadas.getRange(2, COL_PRG.tipo + 1, filas, 1).setDataValidation(lista(TIPOS_PRG));
   usuarios.getRange(2, COL_USR.activo + 1, filas, 1).setDataValidation(casilla);
 }
 
@@ -915,7 +1331,8 @@ function rowToTarea_(row, nombres) {
     creadoPor: String(row[COL.creadoPor]),
     fechaCreacion: normalizarFecha_(row[COL.fechaCreacion]),
     completadoPor: String(row[COL.completadoPor]),
-    fechaCompletada: normalizarFecha_(row[COL.fechaCompletada])
+    fechaCompletada: normalizarFecha_(row[COL.fechaCompletada]),
+    programadaId: String(row[COL.programadaId] || '').trim()
   };
   // Nombres completos para mostrar (si no hay, se muestra el usuario tal cual).
   t.asignadoNombre = nombreDe_(nombres, t.asignadoA);

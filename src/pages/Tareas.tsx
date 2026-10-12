@@ -1,4 +1,4 @@
-import { ClipboardList, Plus, Search } from 'lucide-react'
+import { ClipboardList, Plus, RefreshCw, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { BadgeEstado, BadgePrioridad } from '@/components/tareas/badges'
@@ -178,6 +178,9 @@ export default function Tareas() {
                     <td className="tabular whitespace-nowrap px-4 py-2.5 font-medium text-foreground">#{t.folio}</td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-foreground" title={t.titulo}>
                       {recortar(t.titulo, 50)}
+                      {t.programadaId && (
+                        <RefreshCw className="ml-1.5 inline size-3 text-muted-foreground" aria-label="Tarea programada" />
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{nombreSucursal(t.sucursalId)}</td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{t.asignadoNombre || t.asignadoA || '—'}</td>

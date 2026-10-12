@@ -1,4 +1,4 @@
-import { Building2, ClipboardList, Users } from 'lucide-react'
+import { Building2, CalendarClock, ClipboardList, Users } from 'lucide-react'
 import { useMemo, type ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { BadgePrioridad } from '@/components/tareas/badges'
@@ -16,7 +16,7 @@ interface Modulo {
 }
 
 export default function Inicio() {
-  const { nombre, rol, esAdmin, esPersonal } = useAuth()
+  const { nombre, rol, esAdmin, esPersonal, puedeGestionar } = useAuth()
   const { data: tareas, loading } = useTareas()
   const { nombres } = useSucursales()
 
@@ -44,6 +44,16 @@ export default function Inicio() {
         : 'Registro, asignación y cierre de incidencias.',
       icono: ClipboardList,
     },
+    ...(puedeGestionar
+      ? [
+          {
+            to: '/programadas',
+            titulo: 'Tareas programadas',
+            descripcion: 'Tareas que se crean solas cada cierto tiempo.',
+            icono: CalendarClock,
+          },
+        ]
+      : []),
     ...(esAdmin
       ? [
           {

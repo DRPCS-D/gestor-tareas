@@ -56,6 +56,13 @@ export const TABLAS = {
     persistir: true,
     mensajeError: 'No se pudo cargar el personal.',
   },
+  programadas: {
+    accion: 'listProgramadas',
+    campo: 'programadas',
+    rev: 'programadas',
+    persistir: true,
+    mensajeError: 'No se pudieron cargar las tareas programadas.',
+  },
   comentarios: {
     accion: 'listComentarios',
     campo: 'comentarios',

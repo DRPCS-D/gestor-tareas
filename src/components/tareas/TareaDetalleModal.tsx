@@ -1,6 +1,7 @@
 import { Ban, CheckCircle2, Pencil, RotateCcw, Send, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Cargando, ErrorBox } from '@/components/ui/estado'
 import { Textarea } from '@/components/ui/field'
@@ -111,6 +112,7 @@ export function TareaDetalleModal({
           <div className="flex flex-wrap gap-2">
             <BadgeEstado estado={tarea.estado} />
             <BadgePrioridad prioridad={tarea.prioridad} />
+            {tarea.programadaId && <Badge tono="primary">Programada</Badge>}
           </div>
 
           {tarea.descripcion && (

@@ -12,16 +12,22 @@ import { cn } from '@/lib/utils'
 
 const NAV_INICIO = { to: '/', label: 'Inicio', end: true }
 const NAV_TAREAS = { to: '/tareas', label: 'Tareas', end: false }
+const NAV_PROGRAMADAS = { to: '/programadas', label: 'Programadas', end: false }
 const NAV_SUCURSALES = { to: '/sucursales', label: 'Sucursales', end: false }
 const NAV_USUARIOS = { to: '/usuarios', label: 'Usuarios', end: false }
 
 export default function AppLayout() {
-  const { usuario, nombre, rol, esAdmin, signOut } = useAuth()
+  const { usuario, nombre, rol, esAdmin, puedeGestionar, signOut } = useAuth()
   const navigate = useNavigate()
   const [modalPassword, setModalPassword] = useState(false)
   const { forzando, forzar } = useForzarActualizacion()
 
-  const NAV = [NAV_INICIO, NAV_TAREAS, ...(esAdmin ? [NAV_SUCURSALES, NAV_USUARIOS] : [])]
+  const NAV = [
+    NAV_INICIO,
+    NAV_TAREAS,
+    ...(puedeGestionar ? [NAV_PROGRAMADAS] : []),
+    ...(esAdmin ? [NAV_SUCURSALES, NAV_USUARIOS] : []),
+  ]
 
   useEffect(() => {
     if (!usuario) navigate('/login', { replace: true })

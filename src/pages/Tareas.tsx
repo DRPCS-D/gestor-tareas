@@ -10,7 +10,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/field'
 import { ConfirmModal, Modal } from '@/components/ui/modal'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
-import { useAltoRestante } from '@/hooks/useAltoRestante'
+import { TablaScroll } from '@/components/ui/tabla-scroll'
 import { useAuth } from '@/hooks/useAuth'
 import { usePersonal } from '@/hooks/usePersonal'
 import { useSucursales } from '@/hooks/useSucursales'
@@ -21,7 +21,6 @@ import { PRIORIDADES, PRIORIDAD_LABEL, type EstadoTarea, type Prioridad, type Ta
 
 export default function Tareas() {
   const { esAdmin, esGerente, esPersonal, puedeGestionar, sucursales: misSucursales } = useAuth()
-  const tabla = useAltoRestante<HTMLDivElement>()
   const { data, loading, error, refetch, crear, editar, completar, cancelar, reabrir, eliminar } = useTareas()
   const { data: sucursales, nombres } = useSucursales()
   const { data: personal } = usePersonal(puedeGestionar)
@@ -148,51 +147,53 @@ export default function Tareas() {
       ) : filtradas.length === 0 ? (
         <Vacio icono={ClipboardList} titulo="Sin resultados" descripcion="Prueba con otros filtros." />
       ) : (
-        <div ref={tabla} className="w-full overflow-x-auto rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                <th className="whitespace-nowrap px-4 py-2.5 font-medium">#</th>
-                <th className="whitespace-nowrap px-4 py-2.5 font-medium">Tarea</th>
-                <th className="whitespace-nowrap px-4 py-2.5 font-medium">Sucursal</th>
-                <th className="whitespace-nowrap px-4 py-2.5 font-medium">Asignada a</th>
-                <th className="whitespace-nowrap px-4 py-2.5 font-medium">Prioridad</th>
-                <th className="whitespace-nowrap px-4 py-2.5 font-medium">Estado</th>
-                <th className="whitespace-nowrap px-4 py-2.5 font-medium">Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtradas.map((t) => (
-                <tr
-                  key={t.id}
-                  onClick={() => setDetalle(t)}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      setDetalle(t)
-                    }
-                  }}
-                  className="cursor-pointer border-b border-border last:border-0 hover:bg-accent/40"
-                >
-                  <td className="tabular whitespace-nowrap px-4 py-2.5 font-medium text-foreground">#{t.folio}</td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-foreground" title={t.titulo}>
-                    {recortar(t.titulo, 50)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{nombreSucursal(t.sucursalId)}</td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{t.asignadoNombre || t.asignadoA || '—'}</td>
-                  <td className="whitespace-nowrap px-4 py-2.5">
-                    <BadgePrioridad prioridad={t.prioridad} />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-2.5">
-                    <BadgeEstado estado={t.estado} />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{formatFecha(t.fechaCreacion)}</td>
+        <TablaScroll total={filtradas.length} clave={[busqueda, fEstado, fPrioridad, fSucursal].join('|')}>
+          {(limite) => (
+            <>
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                  <th className="whitespace-nowrap px-4 py-2.5 font-medium">#</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-medium">Tarea</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-medium">Sucursal</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-medium">Asignada a</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-medium">Prioridad</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-medium">Estado</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-medium">Fecha</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filtradas.slice(0, limite).map((t) => (
+                  <tr
+                    key={t.id}
+                    onClick={() => setDetalle(t)}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setDetalle(t)
+                      }
+                    }}
+                    className="cursor-pointer border-b border-border last:border-0 hover:bg-accent/40"
+                  >
+                    <td className="tabular whitespace-nowrap px-4 py-2.5 font-medium text-foreground">#{t.folio}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-foreground" title={t.titulo}>
+                      {recortar(t.titulo, 50)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{nombreSucursal(t.sucursalId)}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{t.asignadoNombre || t.asignadoA || '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5">
+                      <BadgePrioridad prioridad={t.prioridad} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5">
+                      <BadgeEstado estado={t.estado} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{formatFecha(t.fechaCreacion)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </>
+          )}
+        </TablaScroll>
       )}
 
       <TareaDetalleModal

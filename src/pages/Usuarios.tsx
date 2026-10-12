@@ -9,9 +9,9 @@ import { Input } from '@/components/ui/field'
 import { ConfirmModal } from '@/components/ui/modal'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
+import { TablaScroll } from '@/components/ui/tabla-scroll'
 import { EditarUsuarioModal, NuevoUsuarioModal } from '@/components/usuarios/UsuarioModales'
 import { useAuth } from '@/hooks/useAuth'
-import { useAltoRestante } from '@/hooks/useAltoRestante'
 import { useSucursales } from '@/hooks/useSucursales'
 import { useUsuarios } from '@/hooks/useUsuarios'
 import { normalizar } from '@/lib/format'
@@ -20,7 +20,6 @@ import { ROL_LABEL } from '@/lib/tipos'
 export default function Usuarios() {
   const { esAdmin, usuario: usuarioActual, actualizarNombreSesion } = useAuth()
   const navigate = useNavigate()
-  const tabla = useAltoRestante<HTMLDivElement>()
 
   useEffect(() => {
     if (!esAdmin) navigate('/', { replace: true })
@@ -82,52 +81,54 @@ export default function Usuarios() {
       ) : filtrados.length === 0 ? (
         <Vacio icono={UserRound} titulo="Sin resultados" descripcion="Prueba con otra búsqueda." />
       ) : (
-        <div ref={tabla} className="overflow-x-auto rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                <th className="px-4 py-2.5 font-medium">Usuario</th>
-                <th className="px-4 py-2.5 font-medium">Nombre</th>
-                <th className="px-4 py-2.5 font-medium">Rol</th>
-                <th className="px-4 py-2.5 font-medium">Sucursales</th>
-                <th className="px-4 py-2.5 font-medium">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtrados.map((u) => (
-                <tr
-                  key={u.usuario}
-                  onClick={() => setModalEditar(u)}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      setModalEditar(u)
-                    }
-                  }}
-                  className="cursor-pointer border-b border-border last:border-0 hover:bg-accent/40"
-                >
-                  <td className="px-4 py-2.5 font-medium text-foreground">
-                    {u.usuario}
-                    {u.usuario.toUpperCase() === usuarioActual?.toUpperCase() && (
-                      <span className="ml-2 text-xs text-muted-foreground">(tú)</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 text-foreground">{u.nombre || '—'}</td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{ROL_LABEL[u.rol]}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {u.rol === 'admin'
-                      ? 'Todas'
-                      : u.sucursales.map((id) => nombreSucursal.get(id) ?? id).join(', ') || '—'}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Badge tono={u.activo ? 'success' : 'neutral'}>{u.activo ? 'Activo' : 'Inactivo'}</Badge>
-                  </td>
+        <TablaScroll total={filtrados.length} clave={busqueda}>
+          {(limite) => (
+            <>
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                  <th className="px-4 py-2.5 font-medium">Usuario</th>
+                  <th className="px-4 py-2.5 font-medium">Nombre</th>
+                  <th className="px-4 py-2.5 font-medium">Rol</th>
+                  <th className="px-4 py-2.5 font-medium">Sucursales</th>
+                  <th className="px-4 py-2.5 font-medium">Estado</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filtrados.slice(0, limite).map((u) => (
+                  <tr
+                    key={u.usuario}
+                    onClick={() => setModalEditar(u)}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setModalEditar(u)
+                      }
+                    }}
+                    className="cursor-pointer border-b border-border last:border-0 hover:bg-accent/40"
+                  >
+                    <td className="px-4 py-2.5 font-medium text-foreground">
+                      {u.usuario}
+                      {u.usuario.toUpperCase() === usuarioActual?.toUpperCase() && (
+                        <span className="ml-2 text-xs text-muted-foreground">(tú)</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-foreground">{u.nombre || '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{ROL_LABEL[u.rol]}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">
+                      {u.rol === 'admin'
+                        ? 'Todas'
+                        : u.sucursales.map((id) => nombreSucursal.get(id) ?? id).join(', ') || '—'}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Badge tono={u.activo ? 'success' : 'neutral'}>{u.activo ? 'Activo' : 'Inactivo'}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </>
+          )}
+        </TablaScroll>
       )}
 
       <NuevoUsuarioModal

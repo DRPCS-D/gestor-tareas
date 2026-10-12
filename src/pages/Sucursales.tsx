@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ErrorBox, Vacio } from '@/components/ui/estado'
 import { ConfirmModal } from '@/components/ui/modal'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
-import { useAltoRestante } from '@/hooks/useAltoRestante'
+import { TablaScroll } from '@/components/ui/tabla-scroll'
 import { useAuth } from '@/hooks/useAuth'
 import { useSucursales } from '@/hooks/useSucursales'
 import type { Sucursal } from '@/lib/tipos'
@@ -16,7 +16,6 @@ import type { Sucursal } from '@/lib/tipos'
 export default function Sucursales() {
   const { esAdmin } = useAuth()
   const navigate = useNavigate()
-  const tabla = useAltoRestante<HTMLDivElement>()
   const { data, loading, error, refetch, crear, editar, eliminar } = useSucursales()
 
   const [modalForm, setModalForm] = useState<'nueva' | Sucursal | null>(null)
@@ -48,39 +47,41 @@ export default function Sucursales() {
       ) : data.length === 0 ? (
         <Vacio icono={Building2} titulo="Sin sucursales todavía" descripcion="Crea una para poder registrar tareas." />
       ) : (
-        <div ref={tabla} className="overflow-x-auto rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                <th className="px-4 py-2.5 font-medium">Nombre</th>
-                <th className="px-4 py-2.5 font-medium">Dirección</th>
-                <th className="px-4 py-2.5 font-medium">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((s) => (
-                <tr
-                  key={s.id}
-                  onClick={() => setModalForm(s)}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      setModalForm(s)
-                    }
-                  }}
-                  className="cursor-pointer border-b border-border last:border-0 hover:bg-accent/40"
-                >
-                  <td className="px-4 py-2.5 font-medium text-foreground">{s.nombre}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{s.direccion || '—'}</td>
-                  <td className="px-4 py-2.5">
-                    <Badge tono={s.activo ? 'success' : 'neutral'}>{s.activo ? 'Activa' : 'Inactiva'}</Badge>
-                  </td>
+        <TablaScroll total={data.length} clave={''}>
+          {(limite) => (
+            <>
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                  <th className="px-4 py-2.5 font-medium">Nombre</th>
+                  <th className="px-4 py-2.5 font-medium">Dirección</th>
+                  <th className="px-4 py-2.5 font-medium">Estado</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {data.slice(0, limite).map((s) => (
+                  <tr
+                    key={s.id}
+                    onClick={() => setModalForm(s)}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setModalForm(s)
+                      }
+                    }}
+                    className="cursor-pointer border-b border-border last:border-0 hover:bg-accent/40"
+                  >
+                    <td className="px-4 py-2.5 font-medium text-foreground">{s.nombre}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{s.direccion || '—'}</td>
+                    <td className="px-4 py-2.5">
+                      <Badge tono={s.activo ? 'success' : 'neutral'}>{s.activo ? 'Activa' : 'Inactiva'}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </>
+          )}
+        </TablaScroll>
       )}
 
       <SucursalFormModal

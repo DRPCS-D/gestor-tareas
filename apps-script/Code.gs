@@ -388,13 +388,13 @@ function handleDeleteTarea_(body) {
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    t.sheet.deleteRow(t.indice);
+    borrarFila_(t.sheet, t.indice);
     // Los comentarios de la tarea se van con ella (de abajo hacia arriba
     // para que los índices no se corran al borrar).
     var com = getSheet_(SHEET_COMENTARIOS);
     var rows = com.getDataRange().getValues();
     for (var i = rows.length - 1; i >= 1; i--) {
-      if (String(rows[i][COL_COM.tareaId]).trim() === t.tarea.id) com.deleteRow(i + 1);
+      if (String(rows[i][COL_COM.tareaId]).trim() === t.tarea.id) borrarFila_(com, i + 1);
     }
     bumpRevision_('tareas');
     bumpRevision_('comentarios');
@@ -562,7 +562,7 @@ function handleDeleteSucursal_(body) {
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    sheet.deleteRow(encontrada.indice);
+    borrarFila_(sheet, encontrada.indice);
     bumpRevision_('sucursales');
   } finally {
     lock.releaseLock();
@@ -726,7 +726,7 @@ function handleDeleteUsuario_(body) {
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    sheet.deleteRow(encontrada.indice);
+    borrarFila_(sheet, encontrada.indice);
     bumpRevision_('usuarios');
   } finally {
     lock.releaseLock();
@@ -884,6 +884,16 @@ function getSpreadsheet_(crear) {
   props.setProperty('SPREADSHEET_ID', ss.getId());
   Logger.log('Hoja creada: ' + ss.getUrl());
   return ss;
+}
+
+/**
+ * Borra una fila. Sheets no deja eliminar todas las filas no inmovilizadas de
+ * una hoja (la fila 1 está fija): si solo queda una fila de datos, se agrega
+ * una vacía antes de borrar.
+ */
+function borrarFila_(sheet, fila) {
+  if (sheet.getMaxRows() - sheet.getFrozenRows() <= 1) sheet.insertRowAfter(sheet.getMaxRows());
+  sheet.deleteRow(fila);
 }
 
 function getSheet_(name) {

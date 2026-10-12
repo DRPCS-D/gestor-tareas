@@ -1,5 +1,5 @@
 import { CheckCircle2, Pencil, RotateCcw, Send, Trash2 } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Cargando, ErrorBox } from '@/components/ui/estado'
@@ -44,10 +44,17 @@ export function TareaDetalleModal({
   const { data: comentarios, loading, error, refetch, agregar } = useComentarios(tarea?.id ?? null)
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const lista = useRef<HTMLUListElement>(null)
 
   useEffect(() => {
     setTexto('')
   }, [tarea?.id])
+
+  // Los más recientes quedan abajo: al cargar o agregar uno, se baja hasta el final.
+  useEffect(() => {
+    const el = lista.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [comentarios])
 
   async function enviar() {
     const t = texto.trim()
@@ -125,7 +132,7 @@ export function TareaDetalleModal({
             ) : comentarios.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sin comentarios.</p>
             ) : (
-              <ul className="space-y-2">
+              <ul ref={lista} className="max-h-64 space-y-2 overflow-y-auto pr-1">
                 {comentarios.map((c) => (
                   <li key={c.id} className="rounded-md bg-secondary px-3 py-2">
                     <p className="text-xs text-muted-foreground">

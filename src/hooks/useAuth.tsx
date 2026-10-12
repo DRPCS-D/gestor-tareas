@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner'
 import { callApi, onSesionInvalida } from '@/lib/appsScript'
 import { borrarSesion, guardarSesion, leerSesion, type Sesion } from '@/lib/sesion'
+import { detenerSync, iniciarSync, limpiarTablas } from '@/lib/tablas'
 import type { Rol } from '@/lib/tipos'
 
 interface AuthState {
@@ -64,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     borrarSesion()
+    limpiarTablas()
     setSesion(null)
   }, [])
 
@@ -75,10 +77,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return onSesionInvalida(() => {
       if (!leerSesion()) return // ya no había sesión: nada que avisar
       borrarSesion()
+      limpiarTablas()
       setSesion(null)
       toast.error('Tu sesión ya no es válida. Vuelve a iniciar sesión.')
     })
   }, [])
+
+  // El poll de sincronización solo corre mientras hay sesión.
+  const haySesion = sesion !== null
+  useEffect(() => {
+    if (haySesion) iniciarSync()
+    else detenerSync()
+  }, [haySesion])
 
   const actualizarNombreSesion = useCallback((nuevoUsuario: string) => {
     setSesion((s) => {

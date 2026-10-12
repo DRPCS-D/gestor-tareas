@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
-import { ejecutar, useListaApi } from './useListaApi'
+import { ejecutar } from '@/lib/ejecutar'
+import { TABLAS } from '@/lib/tablas'
+import { useTabla } from './useTabla'
 import type { Sucursal } from '@/lib/tipos'
 
 export interface DatosSucursal {
@@ -9,7 +11,7 @@ export interface DatosSucursal {
 }
 
 export function useSucursales() {
-  const lista = useListaApi<Sucursal>('listSucursales', 'sucursales', 'No se pudieron cargar las sucursales.')
+  const lista = useTabla<Sucursal>(TABLAS.sucursales)
 
   /** id → nombre, para mostrar la sucursal de cada tarea. */
   const nombres = useMemo(() => new Map(lista.data.map((s) => [s.id, s.nombre])), [lista.data])

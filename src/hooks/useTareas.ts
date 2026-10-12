@@ -1,4 +1,6 @@
-import { ejecutar, useListaApi } from './useListaApi'
+import { ejecutar } from '@/lib/ejecutar'
+import { TABLAS } from '@/lib/tablas'
+import { useTabla } from './useTabla'
 import type { Prioridad, Tarea } from '@/lib/tipos'
 
 export interface DatosTarea {
@@ -11,7 +13,7 @@ export interface DatosTarea {
 
 /** Tareas visibles para el usuario actual: el backend ya filtra por rol. */
 export function useTareas() {
-  const lista = useListaApi<Tarea>('listTareas', 'tareas', 'No se pudieron cargar las tareas.')
+  const lista = useTabla<Tarea>(TABLAS.tareas)
 
   const crear = (datos: DatosTarea) =>
     ejecutar('createTarea', { ...datos }, 'No se pudo registrar la tarea.')

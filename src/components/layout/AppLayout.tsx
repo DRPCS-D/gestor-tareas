@@ -1,10 +1,12 @@
-import { KeyRound, LogOut } from 'lucide-react'
+import { KeyRound, LogOut, RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { CambiarMiPasswordModal } from '@/components/cuenta/CambiarMiPasswordModal'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/hooks/useAuth'
+import { useForzarActualizacion } from '@/hooks/useTabla'
 import { ROL_LABEL } from '@/lib/tipos'
 import { cn } from '@/lib/utils'
 
@@ -17,6 +19,7 @@ export default function AppLayout() {
   const { usuario, rol, esAdmin, signOut } = useAuth()
   const navigate = useNavigate()
   const [modalPassword, setModalPassword] = useState(false)
+  const { forzando, forzar } = useForzarActualizacion()
 
   const NAV = [NAV_INICIO, NAV_TAREAS, ...(esAdmin ? [NAV_SUCURSALES, NAV_USUARIOS] : [])]
 
@@ -60,6 +63,20 @@ export default function AppLayout() {
               <p className="text-xs font-medium text-foreground">{usuario}</p>
               <p className="text-[11px] text-muted-foreground">{rol ? ROL_LABEL[rol] : ''}</p>
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={forzando}
+              title="Actualizar datos"
+              aria-label="Actualizar datos"
+              onClick={async () => {
+                const ok = await forzar()
+                if (ok) toast.success('Datos actualizados.')
+                else toast.error('No se pudo actualizar todo. Revisa tu conexión.')
+              }}
+            >
+              <RefreshCw className={cn(forzando && 'animate-spin')} />
+            </Button>
             <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={() => setModalPassword(true)} title="Cambiar mi contraseña">
               <KeyRound />

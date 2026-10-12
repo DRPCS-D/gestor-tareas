@@ -65,6 +65,7 @@ function doPost(e) {
   try {
     switch (body.action) {
       case 'login':             return handleLogin_(body);
+      case 'getRevisions':      return handleGetRevisions_(body);
       case 'listTareas':        return handleListTareas_(body);
       case 'createTarea':       return handleCreateTarea_(body);
       case 'updateTarea':       return handleUpdateTarea_(body);
@@ -267,6 +268,7 @@ function handleCreateTarea_(body) {
     fila[COL.completadoPor] = '';
     fila[COL.fechaCompletada] = '';
     sheet.appendRow(fila);
+    bumpRevision_('tareas');
   } finally {
     lock.releaseLock();
   }
@@ -303,6 +305,7 @@ function handleUpdateTarea_(body) {
     t.sheet.getRange(fila, COL.descripcion + 1).setValue(datos.descripcion);
     t.sheet.getRange(fila, COL.prioridad + 1).setValue(datos.prioridad);
     t.sheet.getRange(fila, COL.asignadoA + 1).setValue(asignadoA);
+    bumpRevision_('tareas');
   } finally {
     lock.releaseLock();
   }
@@ -322,6 +325,7 @@ function handleCompletarTarea_(body) {
     t.sheet.getRange(t.indice, COL.estado + 1).setValue('completada');
     t.sheet.getRange(t.indice, COL.completadoPor + 1).setValue(user.usuario);
     t.sheet.getRange(t.indice, COL.fechaCompletada + 1).setValue(new Date().toISOString());
+    bumpRevision_('tareas');
   } finally {
     lock.releaseLock();
   }
@@ -341,6 +345,7 @@ function handleReabrirTarea_(body) {
     t.sheet.getRange(t.indice, COL.estado + 1).setValue('pendiente');
     t.sheet.getRange(t.indice, COL.completadoPor + 1).setValue('');
     t.sheet.getRange(t.indice, COL.fechaCompletada + 1).setValue('');
+    bumpRevision_('tareas');
   } finally {
     lock.releaseLock();
   }
@@ -363,6 +368,8 @@ function handleDeleteTarea_(body) {
     for (var i = rows.length - 1; i >= 1; i--) {
       if (String(rows[i][COL_COM.tareaId]).trim() === t.tarea.id) com.deleteRow(i + 1);
     }
+    bumpRevision_('tareas');
+    bumpRevision_('comentarios');
   } finally {
     lock.releaseLock();
   }
@@ -416,9 +423,33 @@ function agregarComentario_(tareaId, usuario, texto) {
   lock.waitLock(10000);
   try {
     getSheet_(SHEET_COMENTARIOS).appendRow([Utilities.getUuid(), tareaId, usuario, texto, new Date().toISOString()]);
+    bumpRevision_('comentarios');
   } finally {
     lock.releaseLock();
   }
+}
+
+// ---------- Revisiones ----------
+// Un contador por tabla en PropertiesService (no en la hoja), para que el
+// frontend pregunte "¿cambió algo?" sin leer ninguna hoja. Se incrementa en
+// cada alta, edición o baja, dentro del mismo lock de la escritura (por eso
+// no toma el lock por su cuenta). Editar el Sheet a mano NO lo incrementa:
+// para eso está el botón "Actualizar" de la app.
+
+function bumpRevision_(key) {
+  var props = PropertiesService.getScriptProperties();
+  var actual = Number(props.getProperty('rev_' + key)) || 0;
+  props.setProperty('rev_' + key, String(actual + 1));
+}
+
+function handleGetRevisions_(body) {
+  requireAuth_(body);
+  var props = PropertiesService.getScriptProperties();
+  var revisiones = {};
+  ['tareas', 'sucursales', 'usuarios', 'comentarios'].forEach(function (k) {
+    revisiones[k] = Number(props.getProperty('rev_' + k)) || 0;
+  });
+  return jsonOut_({ ok: true, revisiones: revisiones });
 }
 
 // ---------- Sucursales ----------
@@ -449,6 +480,7 @@ function handleCreateSucursal_(body) {
   lock.waitLock(10000);
   try {
     sheet.appendRow([Utilities.getUuid().slice(0, 8), nombre, direccion, true]);
+    bumpRevision_('sucursales');
   } finally {
     lock.releaseLock();
   }
@@ -475,6 +507,7 @@ function handleUpdateSucursal_(body) {
     sheet.getRange(encontrada.indice, COL_SUC.nombre + 1).setValue(nombre);
     sheet.getRange(encontrada.indice, COL_SUC.direccion + 1).setValue(direccion);
     sheet.getRange(encontrada.indice, COL_SUC.activo + 1).setValue(activo);
+    bumpRevision_('sucursales');
   } finally {
     lock.releaseLock();
   }
@@ -500,6 +533,7 @@ function handleDeleteSucursal_(body) {
   lock.waitLock(10000);
   try {
     sheet.deleteRow(encontrada.indice);
+    bumpRevision_('sucursales');
   } finally {
     lock.releaseLock();
   }
@@ -570,6 +604,7 @@ function handleCreateUsuario_(body) {
   lock.waitLock(10000);
   try {
     sheet.appendRow([nombre, password, rol, activo, sucursales.join(',')]);
+    bumpRevision_('usuarios');
   } finally {
     lock.releaseLock();
   }
@@ -615,6 +650,7 @@ function handleUpdateUsuario_(body) {
     sheet.getRange(fila, COL_USR.activo + 1).setValue(activo);
     sheet.getRange(fila, COL_USR.sucursales + 1).setValue(sucursales.join(','));
     if (nuevaPassword) sheet.getRange(fila, COL_USR.password + 1).setValue(nuevaPassword);
+    bumpRevision_('usuarios');
   } finally {
     lock.releaseLock();
   }
@@ -630,6 +666,7 @@ function renombrarEnTareas_(viejo, nuevo) {
       sheet.getRange(i + 1, COL.asignadoA + 1).setValue(nuevo);
     }
   }
+  bumpRevision_('tareas');
 }
 
 function handleDeleteUsuario_(body) {
@@ -651,6 +688,7 @@ function handleDeleteUsuario_(body) {
   lock.waitLock(10000);
   try {
     sheet.deleteRow(encontrada.indice);
+    bumpRevision_('usuarios');
   } finally {
     lock.releaseLock();
   }

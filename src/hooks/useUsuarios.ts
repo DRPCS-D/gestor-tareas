@@ -1,34 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
 import { callApi, conCredenciales } from '@/lib/appsScript'
+import { TABLAS } from '@/lib/tablas'
 import type { Rol, UsuarioApp } from '@/lib/tipos'
-
-interface Estado {
-  data: UsuarioApp[]
-  loading: boolean
-  error: string | null
-}
+import { useTabla } from './useTabla'
 
 /** Lista plana de usuarios del sistema: no hay `empresa_id`, es una sola compañía. */
 export function useUsuarios() {
-  const [estado, setEstado] = useState<Estado>({ data: [], loading: true, error: null })
-
-  const refetch = useCallback(async () => {
-    setEstado((s) => ({ ...s, loading: true, error: null }))
-    try {
-      const data = await callApi<{ usuarios: UsuarioApp[] }>('listUsuarios', conCredenciales())
-      setEstado({ data: data.usuarios || [], loading: false, error: null })
-    } catch (e) {
-      setEstado({
-        data: [],
-        loading: false,
-        error: e instanceof Error ? e.message : 'No se pudieron cargar los usuarios.',
-      })
-    }
-  }, [])
-
-  useEffect(() => {
-    refetch()
-  }, [refetch])
+  const lista = useTabla<UsuarioApp>(TABLAS.usuarios)
 
   async function crear(payload: { usuario: string; password: string; rol: Rol; activo: boolean; sucursales: string[] }) {
     try {
@@ -80,5 +57,5 @@ export function useUsuarios() {
     }
   }
 
-  return { ...estado, refetch, crear, editar, eliminar }
+  return { ...lista, crear, editar, eliminar }
 }

@@ -6,7 +6,7 @@ import { Cargando, ErrorBox } from '@/components/ui/estado'
 import { Textarea } from '@/components/ui/field'
 import { Modal } from '@/components/ui/modal'
 import { useComentarios } from '@/hooks/useComentarios'
-import { formatFecha, formatFechaHora } from '@/lib/format'
+import { formatFechaHora } from '@/lib/format'
 import type { Tarea } from '@/lib/tipos'
 import { BadgeEstado, BadgePrioridad } from './badges'
 
@@ -114,11 +114,11 @@ export function TareaDetalleModal({
             <Dato etiqueta="Sucursal">{nombreSucursal}</Dato>
             <Dato etiqueta="Asignada a">{tarea.asignadoA || 'Sin asignar'}</Dato>
             <Dato etiqueta="Registrada">
-              {formatFecha(tarea.fechaCreacion)} por {tarea.creadoPor}
+              {formatFechaHora(tarea.fechaCreacion)} por {tarea.creadoPor}
             </Dato>
             {tarea.estado === 'completada' && (
               <Dato etiqueta="Completada">
-                {formatFecha(tarea.fechaCompletada)} por {tarea.completadoPor}
+                {formatFechaHora(tarea.fechaCompletada)} por {tarea.completadoPor}
               </Dato>
             )}
           </dl>

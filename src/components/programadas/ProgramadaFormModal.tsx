@@ -6,7 +6,7 @@ import { ErrorBox } from '@/components/ui/estado'
 import { Field, Input, Select, Textarea } from '@/components/ui/field'
 import { Modal } from '@/components/ui/modal'
 import type { DatosProgramada } from '@/hooks/useProgramadas'
-import { hoyLocal } from '@/lib/programadas'
+import { estadoProgramada, hoyLocal } from '@/lib/programadas'
 import {
   DIAS_SEMANA,
   PRIORIDADES,
@@ -31,6 +31,7 @@ export function ProgramadaFormModal({
   onCerrar,
   onGuardado,
   onBorrar,
+  puedeBorrar,
   crear,
   editar,
   crearAhora,
@@ -45,6 +46,8 @@ export function ProgramadaFormModal({
   onCerrar: () => void
   onGuardado: () => void
   onBorrar: () => void
+  /** Solo admin. */
+  puedeBorrar: boolean
   crear: (datos: DatosProgramada) => Promise<{ error: string | null }>
   editar: (id: string, datos: DatosProgramada) => Promise<{ error: string | null }>
   crearAhora: (id: string) => Promise<{ error: string | null }>
@@ -88,6 +91,8 @@ export function ProgramadaFormModal({
     [personal, sucursalId],
   )
   const sucursalesVisibles = sucursales.filter((s) => s.activo || s.id === programada?.sucursalId)
+  // Se puede pausar en este mismo formulario, pero el borrado exige que ya esté guardada como pausada.
+  const estaActiva = programada !== null && estadoProgramada(programada) === 'activa'
   const asignadoFueraDeLista = asignadoA !== '' && !asignables.some((p) => p.usuario === asignadoA)
 
   function cambiarSucursal(id: string) {
@@ -156,9 +161,16 @@ export function ProgramadaFormModal({
         <>
           {programada && (
             <>
-              <Button variant="outline" onClick={onBorrar} disabled={guardando}>
-                <Trash2 className="text-destructive" /> Borrar
-              </Button>
+              {puedeBorrar && (
+                <Button
+                  variant="outline"
+                  onClick={onBorrar}
+                  disabled={guardando || estaActiva}
+                  title={estaActiva ? 'Pausa la tarea programada para poder borrarla' : undefined}
+                >
+                  <Trash2 className="text-destructive" /> Borrar
+                </Button>
+              )}
               <Button variant="outline" onClick={onCrearAhora} disabled={guardando} title="No cambia el calendario">
                 <Play /> Crear una ahora
               </Button>

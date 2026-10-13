@@ -391,9 +391,11 @@ function handleReabrirTarea_(body) {
   return jsonOut_({ ok: true });
 }
 
+/** Solo el admin borra, y solo tareas ya canceladas. */
 function handleDeleteTarea_(body) {
   var user = requireAdmin_(body);
   var t = tareaGestionable_(user, String(body.id || '').trim());
+  if (t.tarea.estado !== 'cancelada') throw new Error('Solo se puede borrar una tarea cancelada. Cancélala primero.');
 
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -1062,9 +1064,13 @@ function handleUpdateProgramada_(body) {
   return jsonOut_({ ok: true });
 }
 
+/** Solo el admin borra, y solo programadas que ya no están activas (pausadas o finalizadas). */
 function handleDeleteProgramada_(body) {
-  var user = requireRol_(body, ['admin', 'gerente']);
+  var user = requireAdmin_(body);
   var x = programadaPorId_(user, String(body.id || '').trim());
+  if (x.p.activo && proximaOcurrencia_(x.p, x.p.ultima > ahoraLocal_() ? x.p.ultima : ahoraLocal_()) !== '') {
+    throw new Error('Pausa la tarea programada antes de borrarla.');
+  }
   var lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {

@@ -80,7 +80,12 @@ export function TareaDetalleModal({
         puedeGestionar && tarea ? (
           <>
             {esAdmin && (
-              <Button variant="outline" onClick={onBorrar}>
+              <Button
+                variant="outline"
+                onClick={onBorrar}
+                disabled={tarea.estado !== 'cancelada'}
+                title={tarea.estado !== 'cancelada' ? 'Cancela la tarea para poder borrarla' : undefined}
+              >
                 <Trash2 className="text-destructive" /> Borrar
               </Button>
             )}

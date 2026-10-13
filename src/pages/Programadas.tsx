@@ -26,7 +26,7 @@ const ESTADO: Record<EstadoProgramada, { label: string; tono: TonoBadge }> = {
 }
 
 export default function Programadas() {
-  const { puedeGestionar, esGerente, sucursales: misSucursales } = useAuth()
+  const { puedeGestionar, esAdmin, esGerente, sucursales: misSucursales } = useAuth()
   const navigate = useNavigate()
   const { data, loading, error, refetch, crear, editar, eliminar, crearAhora } = useProgramadas(puedeGestionar)
   const { data: sucursales, nombres } = useSucursales()
@@ -160,6 +160,7 @@ export default function Programadas() {
           setModalForm(null)
           refetch()
         }}
+        puedeBorrar={esAdmin}
         onBorrar={() => {
           setModalBorrar(modalForm === 'nueva' ? null : modalForm)
           setModalForm(null)

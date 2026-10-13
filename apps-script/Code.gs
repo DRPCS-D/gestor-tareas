@@ -486,10 +486,12 @@ function bumpRevision_(key) {
 
 function handleGetRevisions_(body) {
   requireAuth_(body);
-  var props = PropertiesService.getScriptProperties();
+  // Una sola lectura de propiedades en lugar de una por tabla: esta consulta se repite
+  // cada pocos segundos por usuario y las lecturas tienen tope diario (50.000 en cuentas gmail.com).
+  var props = PropertiesService.getScriptProperties().getProperties();
   var revisiones = {};
   ['tareas', 'sucursales', 'usuarios', 'comentarios', 'programadas'].forEach(function (k) {
-    revisiones[k] = Number(props.getProperty('rev_' + k)) || 0;
+    revisiones[k] = Number(props['rev_' + k]) || 0;
   });
   return jsonOut_({ ok: true, revisiones: revisiones });
 }

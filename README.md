@@ -51,7 +51,7 @@ Heredado del proyecto base: las contraseñas se guardan en texto plano en la hoj
 
 ## Caché y sincronización
 
-Cada tabla (tareas, sucursales, usuarios, personal) se guarda en el navegador junto con un **contador de revisión** que lleva el backend (`bumpRevision_` en `Code.gs`, `rev_*` en las propiedades del script). Al abrir una pantalla se muestra la caché al instante y se pregunta el contador: si no cambió, no se vuelve a descargar. Cada 90 s (con la pestaña visible) y al volver a ella se repite la consulta y se refresca en silencio lo que cambió. Al cerrar sesión se borra la caché.
+Cada tabla (tareas, sucursales, usuarios, personal) se guarda en el navegador junto con un **contador de revisión** que lleva el backend (`bumpRevision_` en `Code.gs`, `rev_*` en las propiedades del script). Al abrir una pantalla se muestra la caché al instante y se pregunta el contador: si no cambió, no se vuelve a descargar. Cada 5 minutos (con la pestaña visible) y al volver a ella se repite la consulta y se refresca en silencio lo que cambió. Al cerrar sesión se borra la caché.
 
 El botón ↻ de la barra superior fuerza la descarga de todo. Úsalo si alguien edita el Sheet **a mano**, porque esos cambios no suben el contador.
 

@@ -86,7 +86,7 @@ export interface Entrada {
 export const VACIA: Entrada = { data: [], tieneDatos: false, cargando: false, error: null, rev: null }
 
 const PREFIJO_CACHE = 'gestor-tareas:cache:'
-const INTERVALO_MS = 90_000
+const INTERVALO_MS = 300_000
 /** Al volver a la pestaña no se re-sincroniza si se hizo hace menos de esto. */
 const PAUSA_VISIBLE_MS = 15_000
 

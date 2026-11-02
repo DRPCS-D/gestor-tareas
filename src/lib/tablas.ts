@@ -248,6 +248,20 @@ async function validar(id: string) {
   await traer(id, rev, false)
 }
 
+/**
+ * Cambia al instante los registros de una tabla ya cargada, cuando el backend confirmó una escritura propia; la
+ * descarga que sigue trae la versión definitiva. Si la tabla no está cargada no hace nada.
+ */
+export function parchearTabla(def: DefTabla, payload: Record<string, unknown>, fn: (data: unknown[]) => unknown[]) {
+  const id = idTabla(def, JSON.stringify(payload))
+  const e = entradas.get(id)
+  if (e?.tieneDatos) {
+    const data = fn(e.data)
+    poner(id, { data })
+    guardarCache(id, def, data, e.rev)
+  }
+}
+
 /** Un componente empieza a usar la tabla. Devuelve la función para soltarla. */
 export function montar(id: string, def: DefTabla, payload: Record<string, unknown>): () => void {
   registro.set(id, { def, payload })

@@ -329,7 +329,7 @@ function handleCreateTarea_(body) {
     liberar_(lock);
   }
 
-  return jsonOut_({ ok: true, tarea: rowToTarea_(filaPorId_(sheet, COL.id, id).valores) });
+  return jsonOut_({ ok: true, tarea: tareaPorId_(sheet, id) });
 }
 
 /** Devuelve el siguiente folio: el mayor existente + 1 (empieza en 1). */
@@ -366,7 +366,7 @@ function handleUpdateTarea_(body) {
     liberar_(lock);
   }
 
-  return jsonOut_({ ok: true, tarea: rowToTarea_(filaPorId_(t.sheet, COL.id, t.tarea.id).valores) });
+  return jsonOut_({ ok: true, tarea: tareaPorId_(t.sheet, t.tarea.id) });
 }
 
 function handleCompletarTarea_(body) {
@@ -387,7 +387,7 @@ function handleCompletarTarea_(body) {
   }
   // La nota de cierre opcional queda como comentario de la tarea.
   if (nota) agregarComentario_(t.tarea.id, user.usuario, 'Completada: ' + nota);
-  return jsonOut_({ ok: true });
+  return jsonOut_({ ok: true, tarea: tareaPorId_(t.sheet, t.tarea.id) });
 }
 
 /** Cierra una tarea pendiente como cancelada (no se hará). Misma lógica que completar. */
@@ -408,7 +408,7 @@ function handleCancelarTarea_(body) {
     liberar_(lock);
   }
   if (nota) agregarComentario_(t.tarea.id, user.usuario, 'Cancelada: ' + nota);
-  return jsonOut_({ ok: true });
+  return jsonOut_({ ok: true, tarea: tareaPorId_(t.sheet, t.tarea.id) });
 }
 
 function handleReabrirTarea_(body) {
@@ -427,7 +427,7 @@ function handleReabrirTarea_(body) {
     liberar_(lock);
   }
   agregarComentario_(t.tarea.id, user.usuario, 'Tarea reabierta.');
-  return jsonOut_({ ok: true });
+  return jsonOut_({ ok: true, tarea: tareaPorId_(t.sheet, t.tarea.id) });
 }
 
 /** Solo el admin borra, y solo tareas ya canceladas. */
@@ -1430,6 +1430,11 @@ function rowToTarea_(row, nombres) {
   t.creadoNombre = nombreDe_(nombres, t.creadoPor);
   t.completadoNombre = nombreDe_(nombres, t.completadoPor);
   return t;
+}
+
+/** La tarea tal como la entrega listTareas (con nombres completos), para que el frontend la ponga en su lista sin volver a descargarla. */
+function tareaPorId_(sheet, id) {
+  return rowToTarea_(filaPorId_(sheet, COL.id, id).valores, mapaNombres_());
 }
 
 /** { USUARIO_EN_MAYUSCULAS: nombre completo } de la pestaña Usuarios. */

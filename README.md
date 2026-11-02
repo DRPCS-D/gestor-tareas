@@ -28,6 +28,11 @@ Si prefieres hacerlo a mano, las pestañas son (fila 1 = encabezados exactos):
 Sin `instalar`, agrega a mano **un admin** en `Usuarios`: `ADMIN | <contraseña> | admin | TRUE |` (sucursales vacío). El resto se crea desde la app.
 `sucursales` guarda ids de la pestaña `Sucursales`, separados por coma (la app lo gestiona sola).
 
+## Vistas
+
+- **Tareas** tiene dos pestañas (la elegida va en la dirección: `/tareas?pestana=programadas`): *Tareas* y *Programadas* (admin y gerente). `/programadas` redirige ahí.
+- **Exportar** (solo admin): botón en la lista de tareas que descarga a PDF (hoja horizontal) o Excel lo que se ve con los filtros actuales.
+
 ## Backend (Apps Script)
 
 1. En la hoja: Extensiones → Apps Script. Pega `apps-script/Code.gs` y, en la configuración del proyecto, activa «Mostrar el archivo appsscript.json» y pega `apps-script/appsscript.json`.

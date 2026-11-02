@@ -47,7 +47,7 @@ export default function Inicio() {
     ...(puedeGestionar
       ? [
           {
-            to: '/programadas',
+            to: '/tareas?pestana=programadas',
             titulo: 'Tareas programadas',
             descripcion: 'Tareas que se crean solas cada cierto tiempo.',
             icono: CalendarClock,

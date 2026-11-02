@@ -1,17 +1,15 @@
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import AppLayout from '@/components/layout/AppLayout'
 import Inicio from '@/pages/Inicio'
 import Login from '@/pages/Login'
 import NoEncontrado from '@/pages/NoEncontrado'
-import Programadas from '@/pages/Programadas'
 import Sucursales from '@/pages/Sucursales'
 import Tareas from '@/pages/Tareas'
 import Usuarios from '@/pages/Usuarios'
 
 /**
  * Dos zonas: `/login` publica, y todo lo demas dentro de `AppLayout` (exige
- * sesion). Sucursales y Usuarios son solo para admin; Programadas para admin y gerente
- * (la propia pagina redirige).
+ * sesion). Sucursales y Usuarios son solo para admin; la pestaña Programadas de Tareas es para admin y gerente.
  */
 export default function App() {
   return (
@@ -21,7 +19,7 @@ export default function App() {
       <Route path="/" element={<AppLayout />}>
         <Route index element={<Inicio />} />
         <Route path="tareas" element={<Tareas />} />
-        <Route path="programadas" element={<Programadas />} />
+        <Route path="programadas" element={<Navigate to="/tareas?pestana=programadas" replace />} />
         <Route path="sucursales" element={<Sucursales />} />
         <Route path="usuarios" element={<Usuarios />} />
       </Route>

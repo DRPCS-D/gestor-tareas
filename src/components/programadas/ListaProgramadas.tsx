@@ -1,6 +1,5 @@
 import { CalendarClock, Plus, Search } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { ProgramadaFormModal } from '@/components/programadas/ProgramadaFormModal'
 import { Badge, type TonoBadge } from '@/components/ui/badge'
@@ -25,9 +24,9 @@ const ESTADO: Record<EstadoProgramada, { label: string; tono: TonoBadge }> = {
   finalizada: { label: 'Finalizada', tono: 'neutral' },
 }
 
-export default function Programadas() {
+/** Plantillas de tareas que se crean solas; la usa la pestaña Programadas de la página Tareas. */
+export function ListaProgramadas() {
   const { puedeGestionar, esAdmin, esGerente, sucursales: misSucursales } = useAuth()
-  const navigate = useNavigate()
   const { data, loading, error, refetch, crear, editar, eliminar, crearAhora } = useProgramadas(puedeGestionar)
   const { data: sucursales, nombres } = useSucursales()
   const { data: personal } = usePersonal(puedeGestionar)
@@ -47,44 +46,30 @@ export default function Programadas() {
     )
   }, [data, busqueda, nombres])
 
-  // Solo admin y gerente programan; el personal vuelve al inicio.
-  useEffect(() => {
-    if (!puedeGestionar) navigate('/', { replace: true })
-  }, [puedeGestionar, navigate])
-
-  if (!puedeGestionar) return null
-
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">Tareas programadas</h1>
-          <p className="text-sm text-muted-foreground">
-            Tareas que se crean solas en la lista de tareas, en las fechas que indiques.
-          </p>
-        </div>
-        <Button onClick={() => setModalForm('nueva')}>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {loading ? (
+          <Skeleton className="h-9.5 w-full max-w-sm" />
+        ) : (
+          data.length > 0 && (
+            <div className="relative min-w-52 max-w-sm flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                name="busqueda"
+                aria-label="Buscar"
+                className="pl-9"
+                placeholder="Buscar…"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+              />
+            </div>
+          )
+        )}
+        <Button className="ml-auto" onClick={() => setModalForm('nueva')}>
           <Plus /> Nueva programada
         </Button>
       </div>
-
-      {loading ? (
-        <Skeleton className="mb-4 h-9.5 max-w-sm" />
-      ) : (
-        data.length > 0 && (
-          <div className="relative mb-4 max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              name="busqueda"
-              aria-label="Buscar"
-              className="pl-9"
-              placeholder="Buscar…"
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-            />
-          </div>
-        )
-      )}
 
       {loading ? (
         <TableSkeleton columnas={[28, 16, 24, 14, 12, 10]} />

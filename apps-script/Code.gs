@@ -147,6 +147,25 @@ function requireAdmin_(body) {
 }
 
 /**
+ * Las credenciales ya validadas se guardan unos minutos en la caché del script (la clave es una huella SHA-256:
+ * la contraseña no se guarda) para no leer la hoja Usuarios en cada llamada. Cualquier cambio de usuarios hecho
+ * desde la app invalida la caché al instante (ver aplicarRevisiones_); lo que se edite a mano en la hoja se nota
+ * a más tardar a los CACHE_AUTH_SEG segundos.
+ */
+var CACHE_AUTH_SEG = 300;
+var CLAVE_VERSION_AUTH = 'auth_version';
+
+function claveAuth_(nombre, pass) {
+  var huella = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, nombre.toUpperCase() + '\n' + pass, Utilities.Charset.UTF_8);
+  return 'auth_' + Utilities.base64Encode(huella);
+}
+
+/** Invalida todas las credenciales guardadas en caché (cambia la versión con la que se comparan). */
+function invalidarAuth_() {
+  try { CacheService.getScriptCache().put(CLAVE_VERSION_AUTH, Utilities.getUuid(), 21600); } catch (e) {}
+}
+
+/**
  * Busca un usuario activo con usuario y contraseña coincidentes.
  * Devuelve { usuario, rol, activo, sucursales } o null.
  */
@@ -155,19 +174,39 @@ function findUser_(usuario, password) {
   var pass = String(password || '');
   if (!nombre || !pass) return null;
 
+  var cache = null, clave = '', version = '';
+  try {
+    cache = CacheService.getScriptCache();
+    clave = claveAuth_(nombre, pass);
+    var guardado = cache.getAll([clave, CLAVE_VERSION_AUTH]);
+    version = guardado[CLAVE_VERSION_AUTH] || '';
+    if (!version) {
+      // Sin versión (primera vez o la caché la perdió): se crea una nueva, y con ella se descartan las entradas viejas.
+      version = Utilities.getUuid();
+      cache.put(CLAVE_VERSION_AUTH, version, 21600);
+    } else if (guardado[clave]) {
+      var c = JSON.parse(guardado[clave]);
+      if (c.v === version) return c.u;
+    }
+  } catch (e) {
+    cache = null; // sin caché disponible se valida contra la hoja, como siempre
+  }
+
   var rows = getSheet_(SHEET_USUARIOS).getDataRange().getValues();
   for (var i = 1; i < rows.length; i++) {
     var rowUsuario = String(rows[i][COL_USR.usuario]).trim();
     var rowPass = String(rows[i][COL_USR.password]);
     // El usuario no distingue mayúsculas/minúsculas; la contraseña sí.
     if (rowUsuario.toUpperCase() === nombre.toUpperCase() && rowPass === pass && esActivo_(rows[i][COL_USR.activo])) {
-      return {
+      var encontrado = {
         usuario: rowUsuario,
         rol: normalizarRol_(rows[i][COL_USR.rol]),
         activo: true,
         nombre: String(rows[i][COL_USR.nombre] || '').trim(),
         sucursales: parseSucursales_(rows[i][COL_USR.sucursales])
       };
+      if (cache) { try { cache.put(clave, JSON.stringify({ v: version, u: encontrado }), CACHE_AUTH_SEG); } catch (e) {} }
+      return encontrado;
     }
   }
   return null;
@@ -287,7 +326,7 @@ function handleCreateTarea_(body) {
     sheet.appendRow(fila);
     bumpRevision_('tareas');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
 
   return jsonOut_({ ok: true, tarea: rowToTarea_(filaPorId_(sheet, COL.id, id).valores) });
@@ -324,7 +363,7 @@ function handleUpdateTarea_(body) {
     t.sheet.getRange(fila, COL.asignadoA + 1).setValue(asignadoA);
     bumpRevision_('tareas');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
 
   return jsonOut_({ ok: true, tarea: rowToTarea_(filaPorId_(t.sheet, COL.id, t.tarea.id).valores) });
@@ -344,7 +383,7 @@ function handleCompletarTarea_(body) {
     t.sheet.getRange(t.indice, COL.fechaCompletada + 1).setValue(new Date().toISOString());
     bumpRevision_('tareas');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   // La nota de cierre opcional queda como comentario de la tarea.
   if (nota) agregarComentario_(t.tarea.id, user.usuario, 'Completada: ' + nota);
@@ -366,7 +405,7 @@ function handleCancelarTarea_(body) {
     t.sheet.getRange(t.indice, COL.fechaCompletada + 1).setValue(new Date().toISOString());
     bumpRevision_('tareas');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   if (nota) agregarComentario_(t.tarea.id, user.usuario, 'Cancelada: ' + nota);
   return jsonOut_({ ok: true });
@@ -385,7 +424,7 @@ function handleReabrirTarea_(body) {
     t.sheet.getRange(t.indice, COL.fechaCompletada + 1).setValue('');
     bumpRevision_('tareas');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   agregarComentario_(t.tarea.id, user.usuario, 'Tarea reabierta.');
   return jsonOut_({ ok: true });
@@ -411,7 +450,7 @@ function handleDeleteTarea_(body) {
     bumpRevision_('tareas');
     bumpRevision_('comentarios');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true });
 }
@@ -467,7 +506,7 @@ function agregarComentario_(tareaId, usuario, texto) {
     getSheet_(SHEET_COMENTARIOS).appendRow([Utilities.getUuid(), tareaId, usuario, texto, new Date().toISOString()]);
     bumpRevision_('comentarios');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
 }
 
@@ -478,22 +517,55 @@ function agregarComentario_(tareaId, usuario, texto) {
 // no toma el lock por su cuenta). Editar el Sheet a mano NO lo incrementa:
 // para eso está el botón "Actualizar" de la app.
 
+var REVISIONES_PENDIENTES_ = [];
+
+/** Propiedades del script tal como quedaron tras el último incremento de esta ejecución (evita volver a leerlas). */
+var PROPS_RECIENTES_ = null;
+
+/** Anota que la tabla cambió; los contadores se suben todos juntos en liberar_, antes de soltar el lock. */
 function bumpRevision_(key) {
+  if (REVISIONES_PENDIENTES_.indexOf(key) === -1) REVISIONES_PENDIENTES_.push(key);
+}
+
+/** Sube los contadores pendientes con una sola lectura y una sola escritura de propiedades. */
+function aplicarRevisiones_() {
+  var claves = REVISIONES_PENDIENTES_;
+  REVISIONES_PENDIENTES_ = [];
+  if (!claves.length) return;
   var props = PropertiesService.getScriptProperties();
-  var actual = Number(props.getProperty('rev_' + key)) || 0;
-  props.setProperty('rev_' + key, String(actual + 1));
+  var todas = props.getProperties();
+  var nuevas = {};
+  claves.forEach(function (k) { nuevas['rev_' + k] = String((Number(todas['rev_' + k]) || 0) + 1); });
+  props.setProperties(nuevas);
+  Object.keys(nuevas).forEach(function (k) { todas[k] = nuevas[k]; });
+  PROPS_RECIENTES_ = todas;
+  // Altas, cambios y bajas de usuarios: las credenciales en caché dejan de valer ya.
+  if (claves.indexOf('usuarios') !== -1) invalidarAuth_();
+}
+
+/** Sube los contadores pendientes y suelta el lock. Va en el finally de cada escritura. */
+function liberar_(lock) {
+  try {
+    aplicarRevisiones_();
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function handleGetRevisions_(body) {
   requireAuth_(body);
   // Una sola lectura de propiedades en lugar de una por tabla: esta consulta se repite
   // cada pocos segundos por usuario y las lecturas tienen tope diario (50.000 en cuentas gmail.com).
-  var props = PropertiesService.getScriptProperties().getProperties();
+  return jsonOut_({ ok: true, revisiones: revisionesActuales_() });
+}
+
+function revisionesActuales_() {
+  var props = PROPS_RECIENTES_ || PropertiesService.getScriptProperties().getProperties();
   var revisiones = {};
   ['tareas', 'sucursales', 'usuarios', 'comentarios', 'programadas'].forEach(function (k) {
     revisiones[k] = Number(props['rev_' + k]) || 0;
   });
-  return jsonOut_({ ok: true, revisiones: revisiones });
+  return revisiones;
 }
 
 // ---------- Sucursales ----------
@@ -526,7 +598,7 @@ function handleCreateSucursal_(body) {
     sheet.appendRow([Utilities.getUuid().slice(0, 8), nombre, direccion, true]);
     bumpRevision_('sucursales');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true });
 }
@@ -553,7 +625,7 @@ function handleUpdateSucursal_(body) {
     sheet.getRange(encontrada.indice, COL_SUC.activo + 1).setValue(activo);
     bumpRevision_('sucursales');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true });
 }
@@ -579,7 +651,7 @@ function handleDeleteSucursal_(body) {
     borrarFila_(sheet, encontrada.indice);
     bumpRevision_('sucursales');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true });
 }
@@ -652,7 +724,7 @@ function handleCreateUsuario_(body) {
     sheet.appendRow([nombre, password, rol, activo, sucursales.join(','), nombreCompleto]);
     bumpRevision_('usuarios');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true });
 }
@@ -705,7 +777,7 @@ function handleUpdateUsuario_(body) {
     if (nuevaPassword) sheet.getRange(fila, COL_USR.password + 1).setValue(nuevaPassword);
     bumpRevision_('usuarios');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true, usuario: seRenombra ? nuevoNombre : nombre.toUpperCase() });
 }
@@ -743,7 +815,7 @@ function handleDeleteUsuario_(body) {
     borrarFila_(sheet, encontrada.indice);
     bumpRevision_('usuarios');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true });
 }
@@ -762,8 +834,9 @@ function handleCambiarMiPassword_(body) {
   lock.waitLock(10000);
   try {
     sheet.getRange(encontrada.indice, COL_USR.password + 1).setValue(nuevaPassword);
+    invalidarAuth_();
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true });
 }
@@ -1027,7 +1100,7 @@ function handleCreateProgramada_(body) {
     escribirFilaTexto_(sheet, sheet.getLastRow() + 1, filaProgramada_(p));
     bumpRevision_('programadas');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true });
 }
@@ -1061,7 +1134,7 @@ function handleUpdateProgramada_(body) {
     escribirFilaTexto_(x.sheet, x.indice, filaProgramada_(p));
     bumpRevision_('programadas');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true });
 }
@@ -1079,7 +1152,7 @@ function handleDeleteProgramada_(body) {
     borrarFila_(x.sheet, x.indice);
     bumpRevision_('programadas');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true });
 }
@@ -1096,7 +1169,7 @@ function handleEjecutarProgramada_(body) {
     folio = crearTareaProgramada_(getSheet_(SHEET_TAREAS), x.p, new Date().toISOString());
     bumpRevision_('tareas');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
   return jsonOut_({ ok: true, folio: folio });
 }
@@ -1168,7 +1241,7 @@ function generarProgramadas() {
     if (cambios) bumpRevision_('programadas');
     if (creadas) bumpRevision_('tareas');
   } finally {
-    lock.releaseLock();
+    liberar_(lock);
   }
 }
 
@@ -1288,7 +1361,15 @@ function aplicarValidaciones_(ss) {
  * (script.google.com) se usa la propiedad SPREADSHEET_ID. Con `crear`, un
  * proyecto independiente sin propiedad crea el Sheet y guarda su ID.
  */
+var SS_ = null;
+var HOJAS_ = {};
+
 function getSpreadsheet_(crear) {
+  if (!SS_) SS_ = abrirSpreadsheet_(crear);
+  return SS_;
+}
+
+function abrirSpreadsheet_(crear) {
   var activa = SpreadsheetApp.getActiveSpreadsheet();
   if (activa) return activa;
 
@@ -1321,8 +1402,10 @@ function borrarFila_(sheet, fila) {
 }
 
 function getSheet_(name) {
+  if (HOJAS_[name]) return HOJAS_[name];
   var sheet = getSpreadsheet_(false).getSheetByName(name);
   if (!sheet) throw new Error('No existe la pestaña "' + name + '" en la hoja de cálculo.');
+  HOJAS_[name] = sheet;
   return sheet;
 }
 
@@ -1449,6 +1532,8 @@ function normalizarFecha_(valor) {
 }
 
 function jsonOut_(obj) {
+  // Tras una escritura que salió bien se devuelven los contadores ya incrementados: el frontend refresca sin pedirlos antes.
+  if (PROPS_RECIENTES_ && obj && obj.ok === true && !obj.revisiones) obj.revisiones = revisionesActuales_();
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }

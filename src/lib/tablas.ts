@@ -12,7 +12,7 @@
  * El store es único para toda la app, así que varias pantallas que usan la
  * misma tabla comparten datos y una sola descarga.
  */
-import { callApi, conCredenciales } from './appsScript'
+import { callApi, conCredenciales, onRevisionesRecibidas } from './appsScript'
 import { leerSesion } from './sesion'
 
 export interface DefTabla {
@@ -172,7 +172,20 @@ function poner(id: string, parche: Partial<Entrada>) {
 
 // ── Red ──
 
+/**
+ * Contadores que el backend devolvió con la última escritura propia. Durante unos segundos valen para refrescar sin
+ * pedirlos de nuevo. Si alguien más escribe en el medio, lo único que pasa es que la tabla queda con un contador un
+ * poco viejo y se vuelve a bajar en la próxima revisión; nunca queda un contador más nuevo que los datos.
+ */
+let revsDeEscritura: { revs: Record<string, number>; en: number } | null = null
+const VIGENCIA_REVS_MS = 8_000
+
+onRevisionesRecibidas((revs) => {
+  revsDeEscritura = { revs, en: Date.now() }
+})
+
 function revisiones(fresco: boolean): Promise<Record<string, number>> {
+  if (revsDeEscritura && Date.now() - revsDeEscritura.en < VIGENCIA_REVS_MS) return Promise.resolve(revsDeEscritura.revs)
   // Las consultas de montaje se comparten; tras una escritura propia hay que
   // pedir una nueva, porque la que va en vuelo pudo salir antes del cambio.
   if (revsEnVuelo && !fresco) return revsEnVuelo
@@ -320,6 +333,7 @@ export function detenerSync() {
 /** Cierre de sesión: vacía memoria y localStorage para no dejar datos en equipos compartidos. */
 export function limpiarTablas() {
   generacion++
+  revsDeEscritura = null
   entradas.clear()
   enVuelo.clear()
   revsEnVuelo = null
